@@ -85,8 +85,7 @@
         select { width: 100%; padding: 8px; background: var(--bg); color: var(--text); border: 1px solid var(--btn-border); border-radius: 4px; outline: none; cursor: pointer; font-size: 0.9em; }
 
         #main { 
-            flex: 1; position: relative; overflow: hidden; background: var(--bg); cursor: crosshair; 
-            touch-action: none;
+            flex: 1; position: relative; overflow: hidden; background: var(--bg); cursor: crosshair;
             -webkit-user-select: none;
             -webkit-touch-callout: none;
             user-select: none;
@@ -218,7 +217,7 @@
     
     <div class="controls-hint">
         <strong>【PC操作】</strong><br>
-        画��移動: ホイール押し込み | 設置/移動: 左クリック/ドラッグ | 削除: 右クリック | 単体回転: R キー | 全体回転: Ctrl+R | ズーム: ホイール<br>
+        画面移動: ホイール押し込み | 設置/移動: 左クリック/ドラッグ | 削除: 右クリック | 単体回転: R キー | 全体回転: Ctrl+R | ズーム: ホイール<br>
         <strong>【スマホ操作】</strong><br>
         画面移動: 1本指ドラッグ | 施設移動: 長押し(0.5秒) | 削除: 長押し(1秒) | ズーム: 2本指ピンチ
     </div>
@@ -631,65 +630,55 @@
     }
 
     mainArea.addEventListener('touchstart', (e) => {
-        console.log('touchstart:', e.touches.length, 'touches');
         closeTouchMenu();
         clearTimeout(moveStartTimer);
         clearTimeout(deleteMenuTimer);
         
         if (e.touches.length === 2) {
-            console.log('Two-finger touch detected');
             touchStartDist = getTouchDistance(e.touches[0], e.touches[1]);
             lastScale = scale;
             isMovingItem = false;
-        } else if (e.touches.length === 1) {
-            console.log('One-finger touch detected');
+            return;
+        }
+        
+        if (e.touches.length === 1) {
             const touch = e.touches[0];
             touchStartPos = { x: touch.clientX, y: touch.clientY };
             updateTouchGridPos(touch);
             
             touchItem = placedItems.find(item => mouseGrid.x >= item.x && mouseGrid.x < item.x + item.w && mouseGrid.y >= item.y && mouseGrid.y < item.y + item.h);
-            console.log('touchItem found:', touchItem ? touchItem.name : 'none');
-            
             touchStartTime = Date.now();
             isMovingItem = false;
             hasMoved = false;
             
-            if (!touchItem || (!currentTool || currentTool.id === 'eraser' || currentTool.id === null)) {
-                console.log('Starting map drag');
+            if (!touchItem) {
                 isDraggingMap = true;
                 lastMousePos = { x: touch.clientX, y: touch.clientY };
                 mainArea.classList.add('dragging-map');
-            } else {
-                console.log('Setting up long-press timers');
-                
-                // 0.5秒後: 施設移動開始
-                moveStartTimer = setTimeout(() => {
-                    console.log('0.5s timer fired, hasMoved:', hasMoved);
-                    if (touchItem && !hasMoved) {
-                        console.log('Starting item movement');
-                        isMovingItem = true;
-                        draggingItem = touchItem;
-                        dragStartPos = { x: touchItem.x, y: touchItem.y };
-                        mainArea.classList.add('dragging-item');
-                        clearTimeout(deleteMenuTimer);
-                    }
-                }, 500);
-                
-                // 1秒後: 削除メニュー表示（移動していない場合のみ）
-                deleteMenuTimer = setTimeout(() => {
-                    console.log('1s timer fired, isMovingItem:', isMovingItem, 'hasMoved:', hasMoved);
-                    if (touchItem && !isMovingItem && !hasMoved) {
-                        console.log('Showing delete menu');
-                        showTouchMenu(touchItem, touchStartPos.x, touchStartPos.y);
-                    }
-                }, 1000);
+                return;
             }
+            
+            // 0.5秒後: 施設移動開始
+            moveStartTimer = setTimeout(() => {
+                if (touchItem && !hasMoved && !isMovingItem) {
+                    isMovingItem = true;
+                    draggingItem = touchItem;
+                    dragStartPos = { x: touchItem.x, y: touchItem.y };
+                    mainArea.classList.add('dragging-item');
+                }
+            }, 500);
+            
+            // 1秒後: 削除メニュー表示
+            deleteMenuTimer = setTimeout(() => {
+                if (touchItem && !isMovingItem && !hasMoved) {
+                    showTouchMenu(touchItem, touchStartPos.x, touchStartPos.y);
+                }
+            }, 1000);
         }
-    }, { passive: true });
+    });
 
     mainArea.addEventListener('touchmove', (e) => {
         if (e.touches.length === 2 && touchStartDist > 0) {
-            // ピンチズーム
             const currentDist = getTouchDistance(e.touches[0], e.touches[1]);
             const zoomRatio = currentDist / touchStartDist;
             const newScale = Math.min(Math.max(0.3, lastScale * zoomRatio), 1.5);
@@ -707,15 +696,12 @@
                 updateStatus();
             }
         } else if (e.touches.length === 1) {
-            // 1本指ドラッグ
             const touch = e.touches[0];
             const deltaX = Math.abs(touch.clientX - touchStartPos.x);
             const deltaY = Math.abs(touch.clientY - touchStartPos.y);
             
-            // 一定距離以上の移動で長押し判定をキャンセル
             if (deltaX > 10 || deltaY > 10) {
                 if (!isMovingItem) {
-                    console.log('Touch moved:', deltaX, deltaY);
                     hasMoved = true;
                     clearTimeout(moveStartTimer);
                     clearTimeout(deleteMenuTimer);
@@ -730,7 +716,6 @@
                 offsetY += touch.clientY - lastMousePos.y;
                 lastMousePos = { x: touch.clientX, y: touch.clientY };
             } else if (isMovingItem && draggingItem) {
-                // 施設を移動中
                 const px = Math.min(mapW - draggingItem.w, mouseGrid.x);
                 const py = Math.min(mapH - draggingItem.h, mouseGrid.y);
                 draggingItem.x = px;
@@ -739,16 +724,14 @@
             
             updateStatus();
         }
-    }, { passive: true });
+    });
 
     mainArea.addEventListener('touchend', (e) => {
-        console.log('touchend');
         clearTimeout(moveStartTimer);
         clearTimeout(deleteMenuTimer);
         touchStartDist = 0;
         
         if (draggingItem && isMovingItem) {
-            // 施設移動終了
             const px = Math.min(mapW - draggingItem.w, mouseGrid.x);
             const py = Math.min(mapH - draggingItem.h, mouseGrid.y);
             if (!isAreaOccupied(px, py, draggingItem.w, draggingItem.h, draggingItem)) {
@@ -768,9 +751,8 @@
         touchItem = null;
         hasMoved = false;
         mainArea.classList.remove('dragging-map', 'dragging-item');
-    }, { passive: true });
+    });
 
-    // 長押しメニュー関連関数
     function showTouchMenu(item, x, y) {
         const menu = document.getElementById('touch-menu');
         const menuName = document.getElementById('touch-menu-item-name');
