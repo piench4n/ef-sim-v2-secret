@@ -197,7 +197,6 @@
                 display: block;
             }
 
-            /* スマホ版では注意書きを含めて非表示 */
             h2, .controls-hint, .warning-text { display: none; }
             
             #main { width: 100%; height: 100vh; touch-action: none; }
@@ -237,10 +236,10 @@
         <div class="tool-group">
             <label>マップ設定</label>
             <select id="map-ratio" onchange="changeMapRatio(this.value)">
-                <option value="40:40">40 × 40</option>
-                <option value="50:50">50 × 50</option>
-                <option value="70:70">70 × 70</option>
                 <option value="80:80">80 × 80</option>
+                <option value="70:70">70 × 70</option>
+                <option value="50:50">50 × 50</option>
+                <option value="40:40">40 × 40</option>
             </select>
         </div>
     </div>
@@ -867,9 +866,7 @@
         try {
             const text = await navigator.clipboard.readText();
             const dataArea = document.getElementById('data-text');
-            if(dataArea) {
-                dataArea.value = text;
-            }
+            if(dataArea) { dataArea.value = text; }
         } catch (err) {
             showModal('クリップボードへのアクセスが拒否されました。', false);
         }
@@ -877,9 +874,7 @@
 
     function clearCodeText() {
         const dataArea = document.getElementById('data-text');
-        if(dataArea) {
-            dataArea.value = '';
-        }
+        if(dataArea) { dataArea.value = ''; }
     }
 
     async function loadConfig() {
