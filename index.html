@@ -130,7 +130,10 @@
         }
         #touch-menu button:hover { background: var(--accent); color: #000; }
 
-        /* --- スマホ対応レイアウト (サイドバー全体横スクロール & ボタン自動追従) --- */
+        /* PC版用のコンテナスタイル（デフォルトは何もしない） */
+        .mobile-v-stack { display: contents; }
+
+        /* --- スマホ対応レイアウト --- */
         @media (max-width: 768px) {
             #sidebar { 
                 width: 100%; min-width: 100%; height: auto; border-right: none; 
@@ -165,7 +168,6 @@
                 border-top: none;
                 color: var(--accent);
                 transition: transform 0.3s ease;
-                /* JSのoffsetHeightを利用して位置を決定 */
                 transform: translateY(calc(var(--mobile-sidebar-height, 0px)));
             }
 
@@ -179,6 +181,14 @@
                 margin-bottom: 0;
                 display: flex;
                 flex-direction: column;
+            }
+
+            /* スマホ版のみ「基本操作」と「マップ設定」を縦に並べる */
+            .mobile-v-stack {
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+                flex-shrink: 0;
             }
 
             #buildings-container {
@@ -212,23 +222,25 @@
         <div id="buildings-container">読み込み中...</div>
     </div>
 
-    <div class="tool-group">
-        <label>基本操作</label>
-        <div class="grid-2">
-            <button class="tool-btn action-btn active" onclick="setMoveMode()" id="btn-move">移動モード</button>
-            <button class="tool-btn action-btn" onclick="setEraser()" id="btn-eraser">削除モード</button>
-            <button class="tool-btn action-btn full-width" onclick="confirmClear()" style="color:var(--danger)">すべて削除</button>
+    <div class="mobile-v-stack">
+        <div class="tool-group">
+            <label>基本操作</label>
+            <div class="grid-2">
+                <button class="tool-btn action-btn active" onclick="setMoveMode()" id="btn-move">移動モード</button>
+                <button class="tool-btn action-btn" onclick="setEraser()" id="btn-eraser">削除モード</button>
+                <button class="tool-btn action-btn full-width" onclick="confirmClear()" style="color:var(--danger)">すべて削除</button>
+            </div>
         </div>
-    </div>
 
-    <div class="tool-group">
-        <label>マップ設定</label>
-        <select id="map-ratio" onchange="changeMapRatio(this.value)">
-            <option value="40:40">40 × 40</option>
-            <option value="50:50">50 × 50</option>
-            <option value="70:70">70 × 70</option>
-            <option value="80:80">80 × 80</option>
-        </select>
+        <div class="tool-group">
+            <label>マップ設定</label>
+            <select id="map-ratio" onchange="changeMapRatio(this.value)">
+                <option value="40:40">40 × 40</option>
+                <option value="50:50">50 × 50</option>
+                <option value="70:70">70 × 70</option>
+                <option value="80:80">80 × 80</option>
+            </select>
+        </div>
     </div>
 
     <div class="tool-group" id="save-area">
@@ -614,7 +626,7 @@
         return placedItems.some(item => (item !== ignoreItem) && (x < item.x + item.w && x + w > item.x && y < item.y + item.h && y + h > item.y));
     }
 
-    // --- マウスイベント (PC用) ---
+    // PCマウスイベント
     mainArea.addEventListener('mousedown', (e) => {
         if (e.button === 1) { isDraggingMap = true; lastMousePos = { x: e.clientX, y: e.clientY }; mainArea.classList.add('dragging-map'); return; }
         if (e.button === 0) {
@@ -673,7 +685,7 @@
         }
     }, { passive: false });
 
-    // --- タッチイベント (スマホ用修正版) ---
+    // タッチイベント
     function getTouchDistance(touch1, touch2) {
         const dx = touch2.clientX - touch1.clientX;
         const dy = touch2.clientY - touch1.clientY;
@@ -692,7 +704,6 @@
         closeTouchMenu();
         clearTimeout(longPressTimer);
         clearTimeout(menuDisplayTimer);
-        
         if (e.touches.length === 2) {
             touchStartDist = getTouchDistance(e.touches[0], e.touches[1]);
             lastScale = scale;
@@ -702,21 +713,16 @@
             const touch = e.touches[0];
             touchStartPos = { x: touch.clientX, y: touch.clientY };
             updateTouchGridPos(touch);
-            
             touchItem = placedItems.find(item => mouseGrid.x >= item.x && mouseGrid.x < item.x + item.w && mouseGrid.y >= item.y && mouseGrid.y < item.y + item.h);
             touchStartTime = Date.now();
             isMovingItem = false;
-            
             if (touchItem) {
-                // 0.5秒後: 移動準備
                 longPressTimer = setTimeout(() => {
                     isMovingItem = true;
                     draggingItem = touchItem;
                     dragStartPos = { x: touchItem.x, y: touchItem.y };
                     mainArea.classList.add('dragging-item');
                 }, 500);
-                
-                // 1.0秒後: メニュー表示
                 menuDisplayTimer = setTimeout(() => {
                     showTouchMenu(touchItem, touchStartPos.x, touchStartPos.y);
                     isMovingItem = false;
@@ -736,14 +742,12 @@
             const currentDist = getTouchDistance(e.touches[0], e.touches[1]);
             const zoomRatio = currentDist / touchStartDist;
             const newScale = Math.min(Math.max(0.30, lastScale * zoomRatio), 1.5);
-            
             if (newScale !== scale) {
                 const rect = mainArea.getBoundingClientRect();
                 const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
                 const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
                 const mx = centerX - rect.left;
                 const my = centerY - rect.top;
-                
                 offsetX -= (mx - offsetX) * (newScale / scale - 1);
                 offsetY -= (my - offsetY) * (newScale / scale - 1);
                 scale = newScale;
@@ -754,14 +758,10 @@
         } else if (e.touches.length === 1) {
             const touch = e.touches[0];
             const dist = Math.sqrt(Math.pow(touch.clientX - touchStartPos.x, 2) + Math.pow(touch.clientY - touchStartPos.y, 2));
-            
-            // 指示：遊びを30pxに
             if (dist > 30) {
                 clearTimeout(menuDisplayTimer);
             }
-
             updateTouchGridPos(touch);
-            
             if (isDraggingMap) {
                 offsetX += touch.clientX - lastMousePos.x;
                 offsetY += touch.clientY - lastMousePos.y;
@@ -778,7 +778,6 @@
         clearTimeout(longPressTimer);
         clearTimeout(menuDisplayTimer);
         touchStartDist = 0;
-        
         if (draggingItem && isMovingItem) {
             const px = Math.min(mapW - draggingItem.w, mouseGrid.x);
             const py = Math.min(mapH - draggingItem.h, mouseGrid.y);
@@ -792,7 +791,6 @@
             updateStats();
             autoSave();
         }
-        
         isDraggingMap = false;
         isMovingItem = false;
         draggingItem = null;
@@ -809,7 +807,6 @@
         const menuHeight = 100;
         let posX = x - (menuWidth / 2);
         let posY = y - (menuHeight + 30);
-        
         menu.style.left = Math.max(10, Math.min(posX, window.innerWidth - menuWidth - 10)) + 'px';
         menu.style.top = Math.max(10, Math.min(posY, window.innerHeight - menuHeight - 10)) + 'px';
     }
@@ -886,8 +883,6 @@
                 catContainer.appendChild(btn);
             });
             changeMapRatio("40:40"); renderButtons(); autoLoad(); updateStats();
-            
-            // 初期の矢印設定を復元
             const btn = document.getElementById('toggle-sidebar');
             if (window.innerWidth <= 768) {
                 btn.innerText = '▲';
@@ -901,7 +896,6 @@
     window.addEventListener('resize', () => {
         centerMap();
         updateMobileSidebarHeight();
-        // リサイズ時の矢印修正
         const btn = document.getElementById('toggle-sidebar');
         const isClosed = document.body.classList.contains('sidebar-closed');
         if (window.innerWidth <= 768) {
