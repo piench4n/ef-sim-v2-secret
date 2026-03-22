@@ -916,14 +916,15 @@
         }
     }, { passive: false });
 
-    // キャンバス上でのみ、ブラウザ標準の右クリックメニューを禁止
-// これにより、スマホの長押しによる自作メニュー表示を邪魔しません
-mainArea.addEventListener('contextmenu', (e) => {
-    // マウス（右クリック）の場合のみ標準メニューを禁止
-    // pointerTypeを確認することで、タッチによる長押しを許可します
+    // ページ全体で右クリックメニューを禁止
+window.addEventListener('contextmenu', (e) => {
+    // マウス（右クリック）からの信号だった場合のみ、ブラウザ標準メニューを禁止
+    // pointerType が 'mouse' の時だけブロックします
     if (e.pointerType === 'mouse') {
-        e.preventDefault();
+        e.preventDefault(); 
     }
+    // 指（touch）による長押しの場合は preventDefault を実行しないため、
+    // ブラウザが「長押しした」と判断し、自作の削除メニューが表示されるようになります
 });
     
     loadConfig(); draw();
