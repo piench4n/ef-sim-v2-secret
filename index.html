@@ -1,51 +1,218 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+    <meta charset="UTF-8">
     <meta name="robots" content="noindex">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Endfield Industrial Simulator</title>
+    <script src="https://unpkg.com/konva@9/konva.min.js"></script>
     <style>
-        :root { --sidebar-width: 250px; }
-        body { margin: 0; display: flex; height: 100vh; overflow: hidden; font-family: sans-serif; }
-        
-        /* サイドバー */
-        #sidebar { 
-            width: var(--sidebar-width); 
-            background: #222; color: white; 
-            transition: transform 0.3s; z-index: 10;
+        :root {
+            --sidebar-width: 280px;
+            --bg-color: #1a1c1e;
+            --accent-color: #ff9d00;
         }
-        #sidebar.closed { transform: translateX(-100%); position: absolute; }
-        
-        /* メイングリッド */
-        #canvas-container { flex-grow: 1; background: #333; position: relative; }
-        canvas { border: 1px solid #444; }
 
-        /* 操作UI */
-        .toggle-btn { position: absolute; left: 10px; top: 10px; z-index: 20; }
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            height: 100vh;
+            background-color: var(--bg-color);
+            color: white;
+            font-family: 'Segoe UI', sans-serif;
+            overflow: hidden;
+        }
+
+        /* サイドバー */
+        #sidebar {
+            width: var(--sidebar-width);
+            height: 100%;
+            background: #25282c;
+            border-right: 1px solid #3f444a;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            flex-direction: column;
+            z-index: 100;
+        }
+
+        #sidebar.closed {
+            margin-left: calc(var(--sidebar-width) * -1);
+        }
+
+        .sidebar-header {
+            padding: 20px;
+            font-weight: bold;
+            border-bottom: 1px solid #3f444a;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        /* マップ表示エリア */
+        #stage-parent {
+            flex-grow: 1;
+            position: relative;
+            cursor: grab;
+            overflow: hidden;
+        }
+
+        #stage-parent:active {
+            cursor: grabbing;
+        }
+
+        /* UIボタン */
+        .ui-btn {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            z-index: 110;
+            background: var(--accent-color);
+            border: none;
+            color: black;
+            padding: 10px 15px;
+            cursor: pointer;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+
+        /* スマホ対応：サイドバーが開いている時にマップを隠さない工夫 */
+        @media (max-width: 768px) {
+            :root { --sidebar-width: 200px; }
+        }
     </style>
 </head>
 <body>
 
-<div id="sidebar">
-    <h3>設備リスト</h3>
-    <div id="item-list">
-        <div class="item" data-size="3x3">加工機A</div>
+<nav id="sidebar">
+    <div class="sidebar-header">
+        <span>工業設備リスト</span>
     </div>
-</div>
+    <div style="padding: 15px;">
+        <p style="font-size: 0.8em; color: #888;">設備をドラッグして配置（開発中）</p>
+        <div style="background: #3f444a; padding: 10px; margin-bottom: 5px; border-radius: 4px; cursor: pointer;">
+            加工機 T1 (3x3)
+        </div>
+    </div>
+</nav>
 
-<div id="canvas-container">
-    <button class="toggle-btn" onclick="toggleSidebar()">☰</button>
-    <canvas id="gridCanvas"></canvas>
-</div>
+<main id="stage-parent">
+    <button class="ui-btn" onclick="toggleSidebar()">MENU</button>
+    <div id="container"></div>
+</main>
 
-<script src="https://unpkg.com/konva@9/konva.min.js"></script>
 <script>
+    // 設定
+    const GRID_SIZE = 40; // 1マスのサイズ(px)
+    const MAP_BLOCKS = 100; // 100x100マス
+    const MAP_WIDTH = GRID_SIZE * MAP_BLOCKS;
+    const MAP_HEIGHT = GRID_SIZE * MAP_BLOCKS;
+
+    // サイドバー開閉
     function toggleSidebar() {
         document.getElementById('sidebar').classList.toggle('closed');
+        setTimeout(handleResize, 310); // アニメーション終了後にリサイズ
     }
 
-    // Konva.js 等を使用して、スマホのタップ操作や
-    // グリッドスナップ（マス目への吸着）ロジックをここに記述します
-    // GitHub上の JSON を fetch() して動的に設備を増やす処理も可能です
+    // Konva ステージ初期化
+    const stage = new Konva.Stage({
+        container: 'container',
+        width: window.innerWidth,
+        height: window.innerHeight,
+        draggable: true, // これでPCのドラッグ移動が可能に
+    });
+
+    const layer = new Konva.Layer();
+    stage.add(layer);
+
+    // グリッド（100x100）を描画する関数
+    function drawGrid() {
+        // 背景の長方形
+        const bg = new Konva.Rect({
+            x: 0,
+            y: 0,
+            width: MAP_WIDTH,
+            height: MAP_HEIGHT,
+            fill: '#1a1c1e',
+        });
+        layer.add(bg);
+
+        // 垂直線
+        for (let i = 0; i <= MAP_BLOCKS; i++) {
+            layer.add(new Konva.Line({
+                points: [i * GRID_SIZE, 0, i * GRID_SIZE, MAP_HEIGHT],
+                stroke: '#333',
+                strokeWidth: 1,
+                listening: false // 線へのイベントを無効化して軽量化
+            }));
+        }
+        // 水平線
+        for (let j = 0; j <= MAP_BLOCKS; j++) {
+            layer.add(new Konva.Line({
+                points: [0, j * GRID_SIZE, MAP_WIDTH, j * GRID_SIZE],
+                stroke: '#333',
+                strokeWidth: 1,
+                listening: false
+            }));
+        }
+    }
+
+    drawGrid();
+    layer.draw();
+
+    // 初期位置を中央付近に
+    stage.position({ x: 50, y: 50 });
+
+    // --- スマホ・PC共通：ズーム機能 ---
+    const scaleBy = 1.1;
+    stage.on('wheel', (e) => {
+        e.evt.preventDefault();
+        const oldScale = stage.scaleX();
+        const pointer = stage.getPointerPosition();
+
+        const mousePointTo = {
+            x: (pointer.x - stage.x()) / oldScale,
+            y: (pointer.y - stage.y()) / oldScale,
+        };
+
+        const newScale = e.evt.deltaY > 0 ? oldScale / scaleBy : oldScale * scaleBy;
+        stage.scale({ x: newScale, y: newScale });
+
+        const newPos = {
+            x: pointer.x - mousePointTo.x * newScale,
+            y: pointer.y - mousePointTo.y * newScale,
+        };
+        stage.position(newPos);
+    });
+
+    // --- スマホ用：ピンチイン・アウト（2本指ズーム） ---
+    let lastDist = 0;
+    stage.on('touchmove', (e) => {
+        if (e.evt.touches.length === 2) {
+            e.evt.preventDefault();
+            const touch1 = e.evt.touches[0];
+            const touch2 = e.evt.touches[1];
+            const dist = Math.sqrt(
+                Math.pow(touch2.clientX - touch1.clientX, 2) +
+                Math.pow(touch2.clientY - touch1.clientY, 2)
+            );
+            if (!lastDist) { lastDist = dist; return; }
+
+            const scale = stage.scaleX() * (dist / lastDist);
+            stage.scale({ x: scale, y: scale });
+            lastDist = dist;
+        }
+    });
+    stage.on('touchend', () => { lastDist = 0; });
+
+    // リサイズ対応
+    function handleResize() {
+        const container = document.getElementById('stage-parent');
+        stage.width(container.offsetWidth);
+        stage.height(container.offsetHeight);
+    }
+    window.addEventListener('resize', handleResize);
+    handleResize();
+
 </script>
 </body>
 </html>
