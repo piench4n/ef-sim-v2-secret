@@ -83,7 +83,7 @@
 
         select { width: 100%; padding: 8px; background: var(--bg); color: var(--text); border: 1px solid var(--btn-border); border-radius: 4px; outline: none; cursor: pointer; font-size: 0.9em; }
 
-        #main { flex: 1; position: relative; overflow: hidden; background: var(--bg); cursor: crosshair; touch-action: none; -webkit-user-select: none; -webkit-touch-callout: none; user-select: none; }
+        #main { flex: 1; position: relative; overflow: hidden; background: var(--bg); cursor: crosshair; -webkit-user-select: none; -webkit-touch-callout: none; user-select: none; }
         #main.dragging-map { cursor: grabbing; }
         #main.dragging-item { cursor: move; }
         canvas { display: block; }
@@ -120,11 +120,13 @@
             position: fixed; display: none; background: var(--panel); border: 2px solid var(--accent);
             border-radius: 8px; padding: 10px; z-index: 999; min-width: 150px;
             box-shadow: 0 0 15px rgba(255, 207, 0, 0.3);
+            pointer-events: auto;
         }
         #touch-menu button {
             display: block; width: 100%; padding: 10px; margin: 5px 0;
             background: var(--btn-idle); border: 1px solid var(--btn-border);
             color: var(--text); border-radius: 4px; cursor: pointer; font-weight: bold;
+            pointer-events: auto;
         }
         #touch-menu button:hover { background: var(--accent); color: #000; }
 
@@ -205,7 +207,7 @@
         <strong>【PC操作】</strong><br>
         画面移動: ホイール押し込み | 設置/移動: 左クリック/ドラッグ | 削除: 右クリック | 単体回転: R キー | 全体回転: Ctrl+R | ズーム: ホイール<br>
         <strong>【スマホ操作】</strong><br>
-        画面移動: 1本指ドラッグ | 設置/移動: タップ後ドラッグ(0.5秒) | 削除: 長押し(1.2秒) | ズーム: 2本指ピンチ
+        画面移動: 1本指ドラッグ | 設置/移動: タップ後ドラッグ(0.5秒) | 削除: 長押し(1秒) | ズーム: 2本指ピンチ
     </div>
 </div>
 
@@ -216,7 +218,7 @@
 
 <div id="touch-menu">
     <strong id="touch-menu-item-name" style="display: block; margin-bottom: 10px;"></strong>
-    <button onclick="deleteTouchItem()">削除</button>
+    <button id="delete-btn" onclick="deleteTouchItem()">削除</button>
     <button onclick="closeTouchMenu()">キャンセル</button>
 </div>
 
@@ -259,6 +261,7 @@
     let touchItem = null;
     let touchStartTime = 0;
     let longPressTimer = null;
+    let menuDisplayTimer = null;
     let isMovingItem = false;
     let touchStartPos = { x: 0, y: 0 };
 
@@ -617,12 +620,15 @@
 
     mainArea.addEventListener('touchstart', (e) => {
         closeTouchMenu();
+        clearTimeout(menuDisplayTimer);
         
         if (e.touches.length === 2) {
-            // ピンチズーム開始
+            // ピンチズーム開始のみ（他の処理なし）
             touchStartDist = getTouchDistance(e.touches[0], e.touches[1]);
             lastScale = scale;
             isMovingItem = false;
+            touchItem = null;
+            clearTimeout(longPressTimer);
         } else if (e.touches.length === 1) {
             // 1本指タッチ開始
             const touch = e.touches[0];
@@ -642,6 +648,13 @@
                     mainArea.classList.add('dragging-item');
                 }
             }, 500);
+            
+            // 1秒後: 削除メニュー表示（長押し中）
+            menuDisplayTimer = setTimeout(() => {
+                if (touchItem && !isMovingItem) {
+                    showTouchMenu(touchItem, touchStartPos.x, touchStartPos.y);
+                }
+            }, 1000);
             
             if (!touchItem && (!currentTool || currentTool.id === 'eraser' || currentTool.id === null)) {
                 // 施設がない場合はマップドラッグ
@@ -694,13 +707,8 @@
 
     mainArea.addEventListener('touchend', (e) => {
         clearTimeout(longPressTimer);
+        clearTimeout(menuDisplayTimer);
         touchStartDist = 0;
-        
-        // 1.2秒長押しチェック（削除メニュー表示）
-        const pressDuration = Date.now() - touchStartTime;
-        if (touchItem && pressDuration >= 1200 && !isMovingItem) {
-            showTouchMenu(touchItem, touchStartPos.x, touchStartPos.y);
-        }
         
         if (draggingItem && isMovingItem) {
             // 施設移動終了
@@ -749,7 +757,7 @@
 
     document.addEventListener('click', (e) => {
         const menu = document.getElementById('touch-menu');
-        if (menu.style.display === 'block' && !menu.contains(e.target)) {
+        if (menu && menu.style.display === 'block' && !menu.contains(e.target)) {
             closeTouchMenu();
         }
     });
