@@ -2,385 +2,389 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="robots" content="noindex">
+    <meta name="robots" content="noindex,nofollow">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Endfield Industrial Simulator</title>
-    <script src="https://unpkg.com/konva@9/konva.min.js"></script>
+    <title>Endfield Industrial Planner</title>
     <style>
-        :root {
-            --sidebar-width: 280px;
-            --bg-color: #1a1c1e;
-            --sidebar-bg: #25282c;
-            --accent-color: #ff9d00;
-            --text-color: #e0e0e0;
-            --border-color: #3f444a;
-            --transition-speed: 0.3s;
+        :root { 
+            --accent: #ffcf00; --danger: #ff4444; --warning: #ffae00; --success: #2ecc71;
+            --bg: #121416; --panel: #1c1f23; --text: #ffffff; --grid: #2a2d30; 
+            --btn-idle: rgba(255, 255, 255, 0.05);
+            --btn-border: rgba(128, 128, 128, 0.3);
+            --sidebar-w: 280px;
+            --tooltip-bg: rgba(0, 0, 0, 0.9);
         }
 
-        body {
-            margin: 0;
-            padding: 0;
-            display: flex;
-            height: 100vh;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            font-family: 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif;
-            overflow: hidden;
-            touch-action: none;
+        body { margin: 0; background: var(--bg); color: var(--text); font-family: sans-serif; display: flex; height: 100vh; overflow: hidden; touch-action: none; }
+        
+        #sidebar { 
+            width: var(--sidebar-w); min-width: var(--sidebar-w); background: var(--panel); border-right: 2px solid rgba(128,128,128,0.2); padding: 20px; 
+            display: flex; flex-direction: column; gap: 12px; overflow-y: auto; z-index: 100;
+            transition: margin-left 0.3s ease, opacity 0.3s ease;
+            -ms-overflow-style: none; scrollbar-width: none; box-sizing: border-box;
         }
+        #sidebar::-webkit-scrollbar { display: none; }
+        body.sidebar-closed #sidebar { margin-left: calc(var(--sidebar-w) * -1); opacity: 0; pointer-events: none; }
 
-        /* サイドバー */
-        #sidebar {
-            width: var(--sidebar-width);
-            height: 100%;
-            background: var(--sidebar-bg);
-            border-right: 1px solid var(--border-color);
-            transition: transform var(--transition-speed) cubic-bezier(0.4, 0, 0.2, 1);
-            display: flex;
-            flex-direction: column;
-            z-index: 100;
-            flex-shrink: 0;
-            overflow-y: auto;
+        #toggle-sidebar {
+            position: fixed; left: var(--sidebar-w); top: 10px; z-index: 110;
+            background: var(--panel); border: 1px solid rgba(128,128,128,0.3); color: var(--accent);
+            padding: 8px 12px; cursor: pointer; border-radius: 0 4px 4px 0;
+            transition: left 0.3s ease; font-weight: bold;
         }
+        body.sidebar-closed #toggle-sidebar { left: 0; }
 
-        #sidebar.closed {
-            transform: translateX(calc(var(--sidebar-width) * -1));
-            position: absolute;
+        .tool-group { border: 1px solid var(--btn-border); padding: 10px; border-radius: 4px; margin-bottom: 5px; text-align: left; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 4px 0; }
+
+        label { font-size: 0.8em; color: var(--accent); font-weight: bold; display: block; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.05em; }
+        h2 { margin-top: 0; font-size: 1.1em; border-bottom: 2px solid var(--accent); padding-bottom: 5px; white-space: nowrap; color: var(--accent); }
+        
+        #summary-panel { font-size: 0.85em; line-height: 1.6; border-bottom: 1px solid var(--btn-border); padding-bottom: 8px; margin-bottom: 12px; }
+        .summary-item { display: flex; justify-content: space-between; }
+        .val-stat { color: var(--accent); font-weight: bold; }
+
+        .cat-container { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+        .cat-btn { font-size: 0.7em; padding: 4px 8px; background: var(--btn-idle); border: 1px solid var(--btn-border); color: var(--text); border-radius: 3px; cursor: pointer; }
+        .cat-btn.active { background: var(--accent); color: #000; font-weight: bold; }
+
+        .tool-btn { 
+            width: 100%; padding: 8px 10px; margin: 2px 0; 
+            background: var(--btn-idle); border: 1px solid var(--btn-border); 
+            color: var(--text); cursor: pointer; text-align: left;
+            transition: 0.2s; border-radius: 4px; 
+            font-size: 0.8em; display: flex; align-items: center; justify-content: space-between;
+            opacity: 0.8; box-sizing: border-box; white-space: nowrap; position: relative;
         }
+        .tool-btn:hover { background: rgba(255, 207, 0, 0.15); border-color: var(--accent); opacity: 1; }
+        .tool-btn.active { background: var(--accent); color: #000; font-weight: bold; border-color: var(--accent); opacity: 1; box-shadow: 0 0 10px rgba(255, 207, 0, 0.3); }
+        
+        .count-badge { font-size: 0.9em; opacity: 0.6; margin-left: auto; padding-right: 4px; }
+        .tool-btn.active .count-badge { color: #000; opacity: 1; }
 
-        .sidebar-section {
-            padding: 20px 15px;
-            border-bottom: 1px solid var(--border-color);
+        .action-btn { font-weight: bold; justify-content: center; text-align: center; }
+        .full-width { grid-column: span 2; } 
+        .save-btn { grid-column: span 2; margin-top: 8px !important; }
+
+        select { width: 100%; padding: 8px; background: var(--bg); color: var(--text); border: 1px solid var(--btn-border); border-radius: 4px; outline: none; cursor: pointer; font-size: 0.9em; }
+
+        #main { flex: 1; position: relative; overflow: hidden; background: var(--bg); cursor: crosshair; }
+        canvas { display: block; }
+        
+        .status-bar { 
+            position: fixed; bottom: 15px; left: calc(var(--sidebar-w) + 20px);
+            background: rgba(0,0,0,0.8); padding: 6px 14px; font-size: 12px; border-radius: 4px; 
+            z-index: 90; pointer-events: none; transition: left 0.3s ease; 
+            border: 1px solid var(--accent); color: var(--accent);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.5); white-space: nowrap;
         }
+        body.sidebar-closed .status-bar { left: 20px; }
 
-        .sidebar-section h3 {
-            margin: 0 0 15px 0;
-            font-size: 0.9em;
-            color: #888;
-            text-transform: uppercase;
-            letter-spacing: 1px;
+        .controls-hint { font-size: 0.7em; color: #888; line-height: 1.6; background: rgba(128,128,128,0.1); padding: 10px; border-radius: 4px; border-left: 3px solid var(--accent); }
+        textarea { width: 100%; height: 60px; background: rgba(0,0,0,0.2); color: var(--accent); border: 1px solid rgba(128,128,128,0.3); font-family: monospace; font-size: 10px; resize: none; margin-top: 5px; padding: 5px; box-sizing: border-box; }
+
+        #modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.7); display: none; justify-content: center; align-items: center; z-index: 1000;
         }
-
-        /* マップサイズ選択ボタン */
-        .size-selector {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
+        #modal-box {
+            background: var(--panel); border: 2px solid var(--accent); padding: 25px; border-radius: 8px;
+            max-width: 400px; width: 90%; text-align: center;
         }
+        .modal-btns { display: flex; gap: 10px; justify-content: center; margin-top: 20px; }
+        .modal-btn { padding: 10px 20px; border-radius: 4px; border: none; cursor: pointer; font-weight: bold; }
+        .modal-confirm { background: var(--accent); color: #000; }
+        .modal-cancel { background: var(--btn-idle); color: var(--text); border: 1px solid var(--btn-border); }
 
-        .size-btn {
-            background: #3f444a;
-            border: 1px solid transparent;
-            color: white;
-            padding: 8px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 0.85em;
-            transition: 0.2s;
+        /* スマホ向け調整 */
+        @media (max-width: 768px) {
+            :root { --sidebar-w: 240px; }
+            .controls-hint { display: none; }
         }
-
-        .size-btn:hover { background: #4f555c; }
-        .size-btn.active {
-            border-color: var(--accent-color);
-            background: rgba(255, 157, 0, 0.1);
-            color: var(--accent-color);
-        }
-
-        /* 設備アイテム */
-        .sidebar-item {
-            background: #3f444a;
-            padding: 12px;
-            margin-bottom: 10px;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.2s;
-            border: 1px solid transparent;
-            user-select: none;
-        }
-
-        .sidebar-item:hover {
-            background: #4f555c;
-            border-color: var(--accent-color);
-        }
-
-        .sidebar-item strong {
-            display: block;
-            color: var(--accent-color);
-            margin-bottom: 4px;
-        }
-
-        /* マップ表示エリア */
-        #stage-parent {
-            flex-grow: 1;
-            position: relative;
-            overflow: hidden;
-            background-color: #111;
-        }
-
-        .ui-btn {
-            position: absolute;
-            top: 15px;
-            left: 15px;
-            z-index: 110;
-            background: var(--accent-color);
-            border: none;
-            color: black;
-            width: 40px;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            border-radius: 4px;
-            font-weight: bold;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-            transition: left var(--transition-speed) cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        #status-bar {
-            position: absolute;
-            bottom: 15px;
-            left: 15px;
-            z-index: 110;
-            background: rgba(0, 0, 0, 0.7);
-            color: #fff;
-            padding: 8px 12px;
-            border-radius: 4px;
-            font-family: monospace;
-            font-size: 12px;
-            pointer-events: none;
-            border-left: 3px solid var(--accent-color);
-            display: flex;
-            gap: 15px;
-            transition: left var(--transition-speed) cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        #loading { color: var(--accent-color); text-align: center; font-size: 0.8em; }
-
-        @media (max-width: 768px) { :root { --sidebar-width: 220px; } }
     </style>
 </head>
 <body>
 
-<nav id="sidebar">
-    <div class="sidebar-section">
-        <h3>マップサイズ</h3>
-        <div class="size-selector">
-            <button class="size-btn" onclick="changeMapSize(40)">40x40</button>
-            <button class="size-btn" onclick="changeMapSize(50)">50x50</button>
-            <button class="size-btn" onclick="changeMapSize(70)">70x70</button>
-            <button class="size-btn active" onclick="changeMapSize(80)">80x80</button>
+<button id="toggle-sidebar" onclick="toggleSidebar()">◀</button>
+
+<div id="sidebar">
+    <h2>工業図面作成</h2>
+
+    <div class="tool-group" id="dynamic-tools">
+        <label>設備一覧</label>
+        <div id="summary-panel">
+            <div class="summary-item"><span>消費電力:</span> <span id="sum-power" class="val-stat">0</span></div>
+        </div>
+        <div class="cat-container" id="category-filters">
+            <button id="cat-all" class="cat-btn active" onclick="filterCategory('all')">すべて</button>
+        </div>
+        <div id="buildings-container">読み込み中...</div>
+    </div>
+
+    <div class="tool-group">
+        <label>基本操作</label>
+        <div class="grid-2">
+            <button class="tool-btn action-btn active" onclick="setMoveMode()" id="btn-move">移動モード</button>
+            <button class="tool-btn action-btn" onclick="setEraser()" id="btn-eraser">削除モード</button>
+            <button class="tool-btn action-btn full-width" onclick="rotateCurrent()" id="btn-rotate">選択中を回転 (R)</button>
         </div>
     </div>
 
-    <div class="sidebar-section">
-        <h3>設備一覧</h3>
-        <div id="item-list">
-            <div id="loading">データ取得中...</div>
+    <div class="tool-group">
+        <label>データ管理</label>
+        <div class="grid-2">
+            <button class="tool-btn action-btn" onclick="exportData()">書出</button>
+            <button class="tool-btn action-btn" onclick="confirmImport()">読込</button>
+            <textarea id="data-text" placeholder="設計図コード"></textarea>
+            <button class="tool-btn action-btn save-btn" onclick="downloadImage()">画像保存 (PNG)</button>
         </div>
     </div>
-</nav>
+</div>
 
-<main id="stage-parent">
-    <button id="toggle-icon" class="ui-btn" onclick="toggleSidebar()">◀</button>
-    
-    <div id="status-bar">
-        <div>座標: <span id="val-pos">0, 0</span></div>
-        <div>ズーム: <span id="val-zoom">30%</span></div>
+<div id="main">
+    <canvas id="gridCanvas"></canvas>
+    <div class="status-bar" id="status">座標: 0, 0 | ズーム: 25%</div>
+</div>
+
+<div id="modal-overlay">
+    <div id="modal-box">
+        <div id="modal-text"></div>
+        <div class="modal-btns">
+            <button id="modal-cancel-btn" class="modal-btn modal-cancel">キャンセル</button>
+            <button id="modal-ok-btn" class="modal-btn modal-confirm">OK</button>
+        </div>
     </div>
+</div>
 
-    <div id="container"></div>
-</main>
+<canvas id="exportCanvas" style="display:none;"></canvas>
 
 <script>
-    // --- 1. 定数・グローバル変数 ---
-    const DATA_URL = 'https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/elements.json';
-    const GRID_SIZE = 40; 
-    let currentMapBlocks = 80; // デフォルトは80x80
+    const canvas = document.getElementById('gridCanvas');
+    const ctx = canvas.getContext('2d');
+    const mainArea = document.getElementById('main');
+    const baseGridSize = 30;
     
-    const MIN_SCALE = 0.3; 
-    const MAX_SCALE = 1.5; 
-    const ZOOM_STEP = 0.05; 
+    let mapW = 40, mapH = 40;
+    let scale = 0.5, offsetX = 0, offsetY = 0;
+    let isDraggingMap = false, draggingItem = null;
+    let lastPos = { x: 0, y: 0 }, mouseGrid = { x: 0, y: 0 };
+    let placedItems = [], allBuildings = [], currentTool = null;
+    let initialPinchDistance = null;
 
-    let buildingMaster = [];
+    // --- モーダル制御 ---
+    function showModal(text, isConfirm, onOk) {
+        const overlay = document.getElementById('modal-overlay');
+        document.getElementById('modal-text').innerText = text;
+        overlay.style.display = 'flex';
+        const okBtn = document.getElementById('modal-ok-btn');
+        const cancelBtn = document.getElementById('modal-cancel-btn');
+        cancelBtn.style.display = isConfirm ? 'inline-block' : 'none';
+        okBtn.onclick = () => { overlay.style.display = 'none'; if(onOk) onOk(); };
+        cancelBtn.onclick = () => { overlay.style.display = 'none'; };
+    }
 
-    // --- 2. データ読み込み ---
-    async function loadExternalData() {
+    // --- 初期化 & データ読み込み ---
+    async function loadConfig() {
         try {
-            const response = await fetch(DATA_URL);
-            if (!response.ok) throw new Error('Data Load Error');
+            const response = await fetch('data.json?t=' + Date.now());
             const data = await response.json();
-            buildingMaster = data.buildings;
-            renderSidebar();
-        } catch (error) {
-            console.error(error);
-            buildingMaster = [
-                { id: 'asmb_1', name: '加工機 T1', size: [3, 3], power: -50, color: '#4a9eff' },
-                { id: 'pole_1', name: '送電パイル', size: [1, 1], power: 0, color: '#ffeb3b' }
-            ];
-            renderSidebar();
-            const ld = document.getElementById('loading');
-            if(ld) ld.innerHTML = '<small style="color:#888">デモデータ読込済</small>';
+            allBuildings = data.buildings || [];
+            setupCategoryFilters();
+            renderButtons();
+            autoLoad();
+            centerMap();
+        } catch (err) {
+            document.getElementById('buildings-container').innerHTML = "JSON読み込み失敗";
         }
     }
 
-    function renderSidebar() {
-        const itemList = document.getElementById('item-list');
-        const loading = document.getElementById('loading');
-        if(loading) loading.remove();
-        itemList.innerHTML = ''; // クリア
-
-        buildingMaster.forEach(item => {
-            const div = document.createElement('div');
-            div.className = 'sidebar-item';
-            div.style.borderLeft = `4px solid ${item.color || '#ccc'}`;
-            div.innerHTML = `
-                <strong>${item.name}</strong>
-                <small>サイズ: ${item.size[0]}x${item.size[1]} | 電力: ${item.power}</small>
-            `;
-            div.onclick = () => console.log('Selected:', item.id);
-            itemList.appendChild(div);
+    function setupCategoryFilters() {
+        const cats = [...new Set(allBuildings.map(b => b.category).filter(c => c))];
+        const container = document.getElementById('category-filters');
+        cats.forEach(c => {
+            const btn = document.createElement('button');
+            btn.className = 'cat-btn';
+            btn.innerText = c;
+            btn.onclick = () => filterCategory(c);
+            container.appendChild(btn);
         });
     }
 
-    // --- 3. マップサイズ変更ロジック ---
-    function changeMapSize(size) {
-        currentMapBlocks = size;
+    // --- 描画ロジック ---
+    function draw() {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.translate(offsetX, offsetY);
+        ctx.scale(scale, scale);
+
+        // グリッド描画
+        ctx.strokeStyle = getComputedStyle(document.body).getPropertyValue('--grid').trim();
+        ctx.lineWidth = 1/scale;
+        ctx.beginPath();
+        for(let i=0; i<=mapW; i++) { ctx.moveTo(i*baseGridSize, 0); ctx.lineTo(i*baseGridSize, mapH*baseGridSize); }
+        for(let j=0; j<=mapH; j++) { ctx.moveTo(0, j*baseGridSize); ctx.lineTo(mapW*baseGridSize, j*baseGridSize); }
+        ctx.stroke();
+
+        // 配置済みアイテム
+        placedItems.forEach(item => {
+            ctx.globalAlpha = (item === draggingItem) ? 0.3 : 0.8;
+            ctx.fillStyle = item.color;
+            ctx.fillRect(item.x*baseGridSize+1, item.y*baseGridSize+1, item.w*baseGridSize-2, item.h*baseGridSize-2);
+            ctx.globalAlpha = 1.0;
+            drawLabel(ctx, item);
+        });
+
+        // プレビュー
+        if(currentTool && currentTool.id !== 'eraser' && !isDraggingMap) {
+            const px = Math.min(mapW - currentTool.w, mouseGrid.x);
+            const py = Math.min(mapH - currentTool.h, mouseGrid.y);
+            ctx.globalAlpha = 0.5;
+            ctx.fillStyle = isAreaOccupied(px, py, currentTool.w, currentTool.h) ? 'red' : currentTool.color;
+            ctx.fillRect(px*baseGridSize, py*baseGridSize, currentTool.w*baseGridSize, currentTool.h*baseGridSize);
+            ctx.globalAlpha = 1.0;
+        }
+
+        requestAnimationFrame(draw);
+    }
+
+    function drawLabel(context, item) {
+        context.save();
+        const cx = (item.x + item.w/2) * baseGridSize;
+        const cy = (item.y + item.h/2) * baseGridSize;
         
-        // ボタンの見た目を更新
-        document.querySelectorAll('.size-btn').forEach(btn => {
-            btn.classList.toggle('active', btn.innerText === `${size}x${size}`);
-        });
+        // 向きマーカー
+        context.translate(cx, cy);
+        context.rotate((item.angle || 0) * Math.PI / 2);
+        context.fillStyle = varColor('--accent');
+        context.beginPath();
+        context.moveTo(0, -item.h*baseGridSize/2 + 5);
+        context.lineTo(-5, -item.h*baseGridSize/2 + 12);
+        context.lineTo(5, -item.h*baseGridSize/2 + 12);
+        context.fill();
+        context.restore();
 
-        // グリッドを再描画
-        drawGrid();
-        updateStatus();
+        // テキスト
+        context.fillStyle = "#fff";
+        context.font = `bold ${12}px sans-serif`;
+        context.textAlign = "center";
+        context.fillText(item.name, cx, cy + 4);
     }
 
-    // --- 4. Konva 初期化 ---
-    const stage = new Konva.Stage({
-        container: 'container',
-        width: window.innerWidth,
-        height: window.innerHeight,
-        draggable: true,
-        scaleX: MIN_SCALE,
-        scaleY: MIN_SCALE
-    });
+    // --- 操作系（PC/スマホ統合） ---
+    function handleStart(x, y, isRightClick) {
+        updateMouseGrid(x, y);
+        const target = placedItems.find(i => mouseGrid.x >= i.x && mouseGrid.x < i.x + i.w && mouseGrid.y >= i.y && mouseGrid.y < i.y + i.h);
 
-    const layer = new Konva.Layer();
-    const gridLayer = new Konva.Layer(); // グリッド専用レイヤー
-    stage.add(gridLayer);
-    stage.add(layer);
-
-    function drawGrid() {
-        gridLayer.destroyChildren(); // 古いグリッドを削除
-
-        const mapWidth = GRID_SIZE * currentMapBlocks;
-        const mapHeight = GRID_SIZE * currentMapBlocks;
-
-        const bg = new Konva.Rect({
-            x: 0, y: 0, width: mapWidth, height: mapHeight, fill: '#1a1c1e',
-        });
-        gridLayer.add(bg);
-
-        const lineColor = '#2a2a2a';
-        for (let i = 0; i <= currentMapBlocks; i++) {
-            gridLayer.add(new Konva.Line({
-                points: [i * GRID_SIZE, 0, i * GRID_SIZE, mapHeight],
-                stroke: lineColor, strokeWidth: 1, listening: false
-            }));
-            gridLayer.add(new Konva.Line({
-                points: [0, i * GRID_SIZE, mapWidth, i * GRID_SIZE],
-                stroke: lineColor, strokeWidth: 1, listening: false
-            }));
+        if (isRightClick || (currentTool && currentTool.id === 'eraser')) {
+            if (target) { placedItems = placedItems.filter(i => i !== target); updateStats(); autoSave(); }
+            return;
         }
-        gridLayer.draw();
-    }
 
-    // --- 5. ステータス・操作 ---
-    function updateStatus() {
-        const scale = Math.round(stage.scaleX() * 100);
-        const zoomEl = document.getElementById('val-zoom');
-        if(zoomEl) zoomEl.innerText = scale + '%';
-
-        const pointer = stage.getPointerPosition();
-        if (pointer) {
-            const mousePointTo = {
-                x: (pointer.x - stage.x()) / stage.scaleX(),
-                y: (pointer.y - stage.y()) / stage.scaleX(),
-            };
-            let gridX = Math.floor(mousePointTo.x / GRID_SIZE);
-            let gridY = Math.floor(mousePointTo.y / GRID_SIZE);
-            
-            // 現在のマップサイズでクランプ
-            gridX = Math.max(0, Math.min(currentMapBlocks, gridX));
-            gridY = Math.max(0, Math.min(currentMapBlocks, gridY));
-            
-            const posEl = document.getElementById('val-pos');
-            if(posEl) posEl.innerText = `${gridX}, ${gridY}`;
-        }
-    }
-
-    stage.on('wheel', (e) => {
-        e.evt.preventDefault();
-        const oldScale = stage.scaleX();
-        const pointer = stage.getPointerPosition();
-        if (!pointer) return;
-        const mousePointTo = { x: (pointer.x - stage.x()) / oldScale, y: (pointer.y - stage.y()) / oldScale };
-        let newScale = e.evt.deltaY > 0 ? oldScale - ZOOM_STEP : oldScale + ZOOM_STEP;
-        newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, newScale));
-        stage.scale({ x: newScale, y: newScale });
-        stage.position({ x: pointer.x - mousePointTo.x * newScale, y: pointer.y - mousePointTo.y * newScale });
-        updateStatus();
-    });
-
-    stage.on('mousemove touchmove', updateStatus);
-
-    // --- 6. UI制御 ---
-    function toggleSidebar() {
-        const sb = document.getElementById('sidebar');
-        const btn = document.getElementById('toggle-icon');
-        const statusBar = document.getElementById('status-bar');
-        const isClosed = sb.classList.toggle('closed');
-
-        if (isClosed) {
-            btn.innerText = "▶";
-            statusBar.style.left = "15px";
+        if (target) {
+            draggingItem = target;
+        } else if (currentTool) {
+            const px = Math.min(mapW - currentTool.w, mouseGrid.x);
+            const py = Math.min(mapH - currentTool.h, mouseGrid.y);
+            if (!isAreaOccupied(px, py, currentTool.w, currentTool.h)) {
+                const newItem = {...currentTool, x: px, y: py};
+                placedItems.push(newItem);
+                updateStats(); autoSave();
+            }
         } else {
-            btn.innerText = "◀";
-            const sidebarWidth = document.getElementById('sidebar').offsetWidth;
-            statusBar.style.left = (sidebarWidth + 15) + "px";
+            isDraggingMap = true;
         }
-
-        let start = null;
-        function animateStep(timestamp) {
-            if (!start) start = timestamp;
-            handleResize();
-            if (timestamp - start < 350) requestAnimationFrame(animateStep);
-        }
-        requestAnimationFrame(animateStep);
+        lastPos = { x, y };
     }
 
-    function handleResize() {
-        const container = document.getElementById('stage-parent');
-        if (!container) return;
-        stage.width(container.offsetWidth);
-        stage.height(container.offsetHeight);
+    function handleMove(x, y) {
+        if (isDraggingMap) {
+            offsetX += x - lastPos.x;
+            offsetY += y - lastPos.y;
+        } else if (draggingItem) {
+            updateMouseGrid(x, y);
+            draggingItem.x = Math.max(0, Math.min(mapW - draggingItem.w, mouseGrid.x));
+            draggingItem.y = Math.max(0, Math.min(mapH - draggingItem.h, mouseGrid.y));
+        }
+        updateMouseGrid(x, y);
+        lastPos = { x, y };
         updateStatus();
     }
 
-    window.addEventListener('resize', handleResize);
+    // --- イベントリスナー ---
+    mainArea.addEventListener('mousedown', e => handleStart(e.clientX, e.clientY, e.button === 2));
+    window.addEventListener('mousemove', e => handleMove(e.clientX, e.clientY));
+    window.addEventListener('mouseup', () => { isDraggingMap = false; draggingItem = null; autoSave(); });
+    mainArea.addEventListener('contextmenu', e => e.preventDefault());
 
-    // 起動
-    drawGrid();
-    loadExternalData();
-    setTimeout(() => {
-        const sidebarWidth = document.getElementById('sidebar').offsetWidth;
-        document.getElementById('status-bar').style.left = (sidebarWidth + 15) + "px";
-        handleResize();
-    }, 100);
-    stage.position({ x: 20, y: 20 });
-    updateStatus();
+    // タッチ対応
+    mainArea.addEventListener('touchstart', e => {
+        if (e.touches.length === 1) handleStart(e.touches[0].clientX, e.touches[0].clientY, false);
+        else if (e.touches.length === 2) initialPinchDistance = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY);
+    }, {passive: false});
+
+    mainArea.addEventListener('touchmove', e => {
+        e.preventDefault();
+        if (e.touches.length === 1) handleMove(e.touches[0].clientX, e.touches[0].clientY);
+        else if (e.touches.length === 2) {
+            const dist = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY);
+            applyZoom(dist > initialPinchDistance ? 0.02 : -0.02, (e.touches[0].clientX + e.touches[1].clientX)/2, (e.touches[0].clientY + e.touches[1].clientY)/2);
+            initialPinchDistance = dist;
+        }
+    }, {passive: false});
+
+    // ズーム共通
+    function applyZoom(delta, cx, cy) {
+        const newScale = Math.min(Math.max(0.1, scale + delta), 2);
+        const rect = mainArea.getBoundingClientRect();
+        const mx = cx - rect.left, my = cy - rect.top;
+        offsetX -= (mx - offsetX) * (newScale / scale - 1);
+        offsetY -= (my - offsetY) * (newScale / scale - 1);
+        scale = newScale;
+    }
+    mainArea.addEventListener('wheel', e => { e.preventDefault(); applyZoom(e.deltaY > 0 ? -0.05 : 0.05, e.clientX, e.clientY); }, {passive: false});
+
+    // --- ユーティリティ ---
+    function updateMouseGrid(clientX, clientY) {
+        const rect = mainArea.getBoundingClientRect();
+        mouseGrid.x = Math.floor(((clientX - rect.left) - offsetX) / scale / baseGridSize);
+        mouseGrid.y = Math.floor(((clientY - rect.top) - offsetY) / scale / baseGridSize);
+    }
+    function isAreaOccupied(x, y, w, h) { return placedItems.some(i => i !== draggingItem && x < i.x + i.w && x + w > i.x && y < i.y + i.h && y + h > i.y); }
+    function varColor(name) { return getComputedStyle(document.body).getPropertyValue(name).trim(); }
+    function toggleSidebar() { document.body.classList.toggle('sidebar-closed'); }
+    function setMoveMode() { currentTool = null; updateActiveBtn('btn-move'); }
+    function setEraser() { currentTool = {id:'eraser'}; updateActiveBtn('btn-eraser'); }
+    function updateActiveBtn(id) { document.querySelectorAll('.action-btn').forEach(b => b.classList.toggle('active', b.id === id)); }
+    function rotateCurrent() { if(currentTool) { const tmp = currentTool.w; currentTool.w = currentTool.h; currentTool.h = tmp; currentTool.angle = (currentTool.angle+1)%4; } }
+    window.addEventListener('keydown', e => { if(e.key.toLowerCase()==='r') rotateCurrent(); });
+
+    // 統計・保存
+    function updateStats() {
+        let p = 0; placedItems.forEach(i => p += (i.power || 0));
+        document.getElementById('sum-power').innerText = p;
+    }
+    function autoSave() { localStorage.setItem('endfield_planner_v1', JSON.stringify(placedItems)); }
+    function autoLoad() { const s = localStorage.getItem('endfield_planner_v1'); if(s) placedItems = JSON.parse(s); updateStats(); }
+
+    // 画像保存
+    function downloadImage() {
+        const exp = document.getElementById('exportCanvas');
+        const exCtx = exp.getContext('2d');
+        exp.width = mapW*baseGridSize; exp.height = mapH*baseGridSize;
+        exCtx.fillStyle = varColor('--bg'); exCtx.fillRect(0,0,exp.width,exp.height);
+        placedItems.forEach(i => {
+            exCtx.fillStyle = i.color; exCtx.fillRect(i.x*baseGridSize, i.y*baseGridSize, i.w*baseGridSize, i.h*baseGridSize);
+            exCtx.fillStyle = "#fff"; exCtx.fillText(i.name, (i.x+i.w/2)*baseGridSize, (i.y+i.h/2)*baseGridSize);
+        });
+        const a = document.createElement('a'); a.download = 'plan.png'; a.href = exp.toDataURL(); a.click();
+    }
+
+    function exportData() { document.getElementById('data-text').value = btoa(JSON.stringify(placedItems)); }
+    function confirmImport() { const d = document.getElementById('data-text').value; if(d) { placedItems = JSON.parse(atob(d)); updateStats(); } }
+    function centerMap() { canvas.width = mainArea.clientWidth; canvas.height = mainArea.clientHeight; offsetX = 50; offsetY = 50; }
+
+    loadConfig();
+    draw();
 </script>
 </body>
 </html>
