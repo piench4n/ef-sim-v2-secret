@@ -197,13 +197,9 @@
                 display: block;
             }
 
-            h2, .controls-hint { display: none; }
+            /* スマホ版では注意書きを含めて非表示 */
+            h2, .controls-hint, .warning-text { display: none; }
             
-            .warning-text {
-                white-space: normal;
-                min-width: 240px;
-            }
-
             #main { width: 100%; height: 100vh; touch-action: none; }
             .status-bar { left: 10px; bottom: 10px; }
             body.sidebar-closed .status-bar { left: 10px; }
@@ -848,7 +844,7 @@
         expCtx.strokeStyle = getComputedStyle(document.body).getPropertyValue('--grid').trim();
         expCtx.lineWidth = 1;
         for(let i=0; i<=mapW; i++) { expCtx.beginPath(); expCtx.moveTo(i*baseGridSize, 0); expCtx.lineTo(i*baseGridSize, expCanvas.height); expCtx.stroke(); }
-        for(let j=0; j<=mapH; j++) { expCtx.beginPath(); expCtx.moveTo(0, j*baseGridSize); expCtx.lineTo(expCanvas.width, j*baseGridSize); expCtx.stroke(); }
+        for(let j=0; j<=mapH; j++) { expCtx.beginPath(); expCtx.moveTo(0, j*baseGridSize); ctx.lineTo(expCanvas.width, j*baseGridSize); expCtx.stroke(); }
         placedItems.forEach(item => { 
             expCtx.fillStyle = item.color; expCtx.globalAlpha = 0.9; 
             expCtx.fillRect(item.x*baseGridSize+1, item.y*baseGridSize+1, item.w*baseGridSize-2, item.h*baseGridSize-2); 
