@@ -362,6 +362,11 @@
         mapW = w; mapH = h;
         canvas.width = mapW * baseGridSize;
         canvas.height = mapH * baseGridSize;
+        
+        // セレクトボックスの値と同期
+        const selector = document.getElementById('map-ratio');
+        if(selector.value !== val) selector.value = val;
+        
         centerMap();
     }
 
@@ -428,7 +433,11 @@
                 btn.onclick = () => filterCategory(c);
                 catContainer.appendChild(btn);
             });
-            changeMapRatio("40:40"); renderButtons(); autoLoad(); updateStats();
+            
+            // 初期サイズを 80:80 (リストの先頭) に変更
+            changeMapRatio("80:80"); 
+            renderButtons(); autoLoad(); updateStats();
+            
             const btn = document.getElementById('toggle-sidebar');
             if (window.innerWidth <= 768) {
                 btn.innerText = '▲';
@@ -891,7 +900,11 @@
                 btn.onclick = () => filterCategory(c);
                 catContainer.appendChild(btn);
             });
-            changeMapRatio("40:40"); renderButtons(); autoLoad(); updateStats();
+            
+            // リストの先頭である 80 × 80 で初期化
+            changeMapRatio("80:80"); 
+            
+            renderButtons(); autoLoad(); updateStats();
             const btn = document.getElementById('toggle-sidebar');
             if (window.innerWidth <= 768) {
                 btn.innerText = '▲';
