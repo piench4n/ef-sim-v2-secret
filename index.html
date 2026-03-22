@@ -132,25 +132,37 @@
 
         /* スマホ対応レイアウト */
         @media (max-width: 768px) {
-            :root { --sidebar-w: 100%; }
+            :root { --sidebar-w: 80%; }
             body { flex-direction: column; }
             #sidebar { 
-                width: 100%; min-width: auto; border-right: none; border-bottom: 2px solid rgba(128,128,128,0.2);
-                max-height: 40vh; min-height: 150px;
+                width: var(--sidebar-w); min-width: auto; border-right: none; 
+                border-bottom: 2px solid rgba(128,128,128,0.2);
+                height: 100vh; position: fixed; left: 0; top: 0;
+                max-height: none;
             }
             body.sidebar-closed #sidebar { 
-                margin-left: 0; margin-bottom: calc(100% * -1); opacity: 0;
+                margin-left: calc(var(--sidebar-w) * -1); opacity: 0;
             }
+
+            /* スマホ用開閉ボタン位置調整 */
             #toggle-sidebar { 
-                left: 10px; top: auto; bottom: 10px; border-radius: 4px 4px 0 0;
+                left: var(--sidebar-w); 
+                top: 50%;
+                transform: translateY(-50%);
+                bottom: auto;
+                border-radius: 0 8px 8px 0;
+                padding: 15px 8px;
+                background: var(--accent);
+                color: #000;
+                box-shadow: 2px 0 10px rgba(0,0,0,0.5);
             }
-            body.sidebar-closed #toggle-sidebar { bottom: 10px; }
-            #main { 
-                flex: 1; width: 100%;
+            body.sidebar-closed #toggle-sidebar { 
+                left: 0; 
+                top: 50%;
             }
-            .status-bar { 
-                left: 10px; bottom: 50px;
-            }
+
+            #main { flex: 1; width: 100%; height: 100vh; }
+            .status-bar { left: 10px; bottom: 20px; }
             body.sidebar-closed .status-bar { left: 10px; }
         }
     </style>
@@ -255,7 +267,6 @@
     let allBuildings = [];
     let currentCategory = 'all';
 
-    // タッチ関連変数
     let touchStartDist = 0;
     let lastScale = 0.30;
     let touchItem = null;
@@ -436,18 +447,14 @@
     function drawLabel(context, text, x, y, itemW, itemH, angle = 0) {
         const pxW = itemW * baseGridSize;
         const pxH = itemH * baseGridSize;
-        const padding = 2;
-        
         context.save();
         context.translate(x, y);
         context.rotate(angle * Math.PI / 2);
-        
         context.strokeStyle = "rgba(0, 0, 0, 0.8)";
         context.lineWidth = 2;
         context.lineJoin = "round";
         const triSize = Math.min(7, pxW/3.5);
         const topY = -pxH/2 + 2;
-        
         const drawTri = () => {
             context.beginPath();
             context.moveTo(0, topY);
@@ -455,21 +462,17 @@
             context.lineTo(triSize, topY + triSize * 1.2);
             context.closePath();
         };
-
         drawTri();
         context.stroke();
         context.fillStyle = "#ffcf00";
         context.fill();
         context.restore();
-
         let fontSize = (itemW === 1 || itemH === 1) ? 11 : 13;
         context.font = `bold ${fontSize}px sans-serif`;
         context.textAlign = "center";
         context.textBaseline = "middle";
-        
         const maxAvailableW = pxW - 4;
         let displayName = text;
-
         if (context.measureText(displayName).width > maxAvailableW) {
             let shortName = text[0] + "...";
             if (context.measureText(shortName).width <= maxAvailableW) {
@@ -481,7 +484,6 @@
                 }
             } else displayName = text[0];
         }
-        
         context.fillStyle = "rgba(0, 0, 0, 0.85)";
         context.fillText(displayName, x + 0.5, y + 0.5);
         context.fillStyle = "#fff";
@@ -495,14 +497,11 @@
         ctx.scale(scale, scale);
         ctx.strokeStyle = getComputedStyle(document.body).getPropertyValue('--grid').trim();
         ctx.lineWidth = 1/scale;
-        
         for(let i=0; i<=mapW; i++) { ctx.beginPath(); ctx.moveTo(i*baseGridSize, 0); ctx.lineTo(i*baseGridSize, mapH*baseGridSize); ctx.stroke(); }
         for(let j=0; j<=mapH; j++) { ctx.beginPath(); ctx.moveTo(0, j*baseGridSize); ctx.lineTo(mapW*baseGridSize, j*baseGridSize); ctx.stroke(); }
-
         const activePreview = draggingItem || (currentTool && currentTool.id !== 'eraser' ? currentTool : null);
         const px = activePreview ? Math.min(mapW - activePreview.w, mouseGrid.x) : -100;
         const py = activePreview ? Math.min(mapH - activePreview.h, mouseGrid.y) : -100;
-
         placedItems.forEach(item => {
             ctx.fillStyle = item.color; ctx.globalAlpha = (item === draggingItem) ? 0.15 : 0.8;
             ctx.fillRect(item.x*baseGridSize+1, item.y*baseGridSize+1, item.w*baseGridSize-2, item.h*baseGridSize-2);
@@ -523,7 +522,6 @@
                 }
             }
         });
-
         if(activePreview) {
             ctx.globalAlpha = 0.5;
             const occupied = isAreaOccupied(px, py, activePreview.w, activePreview.h, draggingItem);
@@ -544,7 +542,6 @@
         return placedItems.some(item => (item !== ignoreItem) && (x < item.x + item.w && x + w > item.x && y < item.y + item.h && y + h > item.y));
     }
 
-    // --- マウスイベント（PC用） ---
     mainArea.addEventListener('mousedown', (e) => {
         if (e.button === 1) { isDraggingMap = true; lastMousePos = { x: e.clientX, y: e.clientY }; mainArea.classList.add('dragging-map'); return; }
         if (e.button === 0) {
@@ -603,7 +600,6 @@
         }
     }, { passive: false });
 
-    // --- タッチイベント（スマホ用） ---
     function getTouchDistance(touch1, touch2) {
         const dx = touch2.clientX - touch1.clientX;
         const dy = touch2.clientY - touch1.clientY;
@@ -622,7 +618,6 @@
         closeTouchMenu();
         clearTimeout(longPressTimer);
         clearTimeout(menuDisplayTimer);
-        
         if (e.touches.length === 2) {
             touchStartDist = getTouchDistance(e.touches[0], e.touches[1]);
             lastScale = scale;
@@ -632,21 +627,15 @@
             const touch = e.touches[0];
             touchStartPos = { x: touch.clientX, y: touch.clientY };
             updateTouchGridPos(touch);
-            
             touchItem = placedItems.find(item => mouseGrid.x >= item.x && mouseGrid.x < item.x + item.w && mouseGrid.y >= item.y && mouseGrid.y < item.y + item.h);
-            touchStartTime = Date.now();
             isMovingItem = false;
-            
             if (touchItem) {
-                // 0.5秒後: 移動準備
                 longPressTimer = setTimeout(() => {
                     isMovingItem = true;
                     draggingItem = touchItem;
                     dragStartPos = { x: touchItem.x, y: touchItem.y };
                     mainArea.classList.add('dragging-item');
                 }, 500);
-                
-                // 1.0秒後: 移動をキャンセルしてメニューを表示
                 menuDisplayTimer = setTimeout(() => {
                     showTouchMenu(touchItem, touchStartPos.x, touchStartPos.y);
                     isMovingItem = false;
@@ -666,15 +655,12 @@
             const currentDist = getTouchDistance(e.touches[0], e.touches[1]);
             const zoomRatio = currentDist / touchStartDist;
             const newScale = Math.min(Math.max(0.30, lastScale * zoomRatio), 1.5);
-            
             if (newScale !== scale) {
                 const rect = mainArea.getBoundingClientRect();
                 const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
                 const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-                const mx = centerX - rect.left;
-                const my = centerY - rect.top;
-                offsetX -= (mx - offsetX) * (newScale / scale - 1);
-                offsetY -= (my - offsetY) * (newScale / scale - 1);
+                offsetX -= (centerX - rect.left - offsetX) * (newScale / scale - 1);
+                offsetY -= (centerY - rect.top - offsetY) * (newScale / scale - 1);
                 scale = newScale;
                 updateStatus();
             }
@@ -682,24 +668,16 @@
             clearTimeout(longPressTimer);
         } else if (e.touches.length === 1) {
             const touch = e.touches[0];
-            
-            // 指が大きく動いたら（30px）長押しメニューをキャンセル
             const dist = Math.sqrt(Math.pow(touch.clientX - touchStartPos.x, 2) + Math.pow(touch.clientY - touchStartPos.y, 2));
-            if (dist > 30) {
-                clearTimeout(menuDisplayTimer);
-            }
-
+            if (dist > 30) clearTimeout(menuDisplayTimer);
             updateTouchGridPos(touch);
-            
             if (isDraggingMap) {
                 offsetX += touch.clientX - lastMousePos.x;
                 offsetY += touch.clientY - lastMousePos.y;
                 lastMousePos = { x: touch.clientX, y: touch.clientY };
             } else if (isMovingItem && draggingItem) {
-                const px = Math.min(mapW - draggingItem.w, mouseGrid.x);
-                const py = Math.min(mapH - draggingItem.h, mouseGrid.y);
-                draggingItem.x = px;
-                draggingItem.y = py;
+                draggingItem.x = Math.min(mapW - draggingItem.w, mouseGrid.x);
+                draggingItem.y = Math.min(mapH - draggingItem.h, mouseGrid.y);
             }
             updateStatus();
         }
@@ -708,62 +686,41 @@
     mainArea.addEventListener('touchend', (e) => {
         clearTimeout(longPressTimer);
         clearTimeout(menuDisplayTimer);
-        touchStartDist = 0;
-        
         if (draggingItem && isMovingItem) {
             const px = Math.min(mapW - draggingItem.w, mouseGrid.x);
             const py = Math.min(mapH - draggingItem.h, mouseGrid.y);
             if (!isAreaOccupied(px, py, draggingItem.w, draggingItem.h, draggingItem)) {
-                draggingItem.x = px;
-                draggingItem.y = py;
+                draggingItem.x = px; draggingItem.y = py;
             } else {
-                draggingItem.x = dragStartPos.x;
-                draggingItem.y = dragStartPos.y;
+                draggingItem.x = dragStartPos.x; draggingItem.y = dragStartPos.y;
             }
-            updateStats();
-            autoSave();
+            updateStats(); autoSave();
         }
-        
-        isDraggingMap = false;
-        isMovingItem = false;
-        draggingItem = null;
+        isDraggingMap = false; isMovingItem = false; draggingItem = null;
         mainArea.classList.remove('dragging-map', 'dragging-item');
     }, { passive: true });
 
     function showTouchMenu(item, x, y) {
         const menu = document.getElementById('touch-menu');
-        const menuName = document.getElementById('touch-menu-item-name');
         if (!menu || !item) return;
-        menuName.innerText = item.name;
+        document.getElementById('touch-menu-item-name').innerText = item.name;
         menu.style.display = 'block';
-        const menuWidth = 160;
-        const menuHeight = 100;
-        let posX = x - (menuWidth / 2);
-        let posY = y - (menuHeight + 30);
-        
-        menu.style.left = Math.max(10, Math.min(posX, window.innerWidth - menuWidth - 10)) + 'px';
-        menu.style.top = Math.max(10, Math.min(posY, window.innerHeight - menuHeight - 10)) + 'px';
+        const mWidth = 160, mHeight = 100;
+        menu.style.left = Math.max(10, Math.min(x - mWidth/2, window.innerWidth - mWidth - 10)) + 'px';
+        menu.style.top = Math.max(10, Math.min(y - mHeight - 30, window.innerHeight - mHeight - 10)) + 'px';
     }
 
-    function closeTouchMenu() {
-        document.getElementById('touch-menu').style.display = 'none';
-    }
-
+    function closeTouchMenu() { document.getElementById('touch-menu').style.display = 'none'; }
     function deleteTouchItem() {
         if (touchItem) {
             placedItems = placedItems.filter(i => i !== touchItem);
-            updateStats();
-            autoSave();
-            closeTouchMenu();
-            touchItem = null;
+            updateStats(); autoSave(); closeTouchMenu(); touchItem = null;
         }
     }
 
     document.addEventListener('click', (e) => {
         const menu = document.getElementById('touch-menu');
-        if (menu && menu.style.display === 'block' && !menu.contains(e.target)) {
-            closeTouchMenu();
-        }
+        if (menu && menu.style.display === 'block' && !menu.contains(e.target)) closeTouchMenu();
     });
 
     function updateStatus() { 
