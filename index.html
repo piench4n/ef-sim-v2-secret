@@ -18,7 +18,6 @@
         body { 
             margin: 0; background: var(--bg); color: var(--text); font-family: sans-serif; 
             display: flex; height: 100vh; overflow: hidden;
-            /* スマホのネイティブメニュー対応 */
             -webkit-user-select: none;
             -webkit-touch-callout: none;
             user-select: none;
@@ -447,18 +446,14 @@
         }
     });
 
-    // --- ラベルのリサイズ機能と強調版方位▲の描画 ---
     function drawLabel(context, text, x, y, itemW, itemH, angle = 0) {
         const pxW = itemW * baseGridSize;
         const pxH = itemH * baseGridSize;
-        const padding = 2;
         
-        // 1. 方位マーカー（▲）の描画 - 強調版
         context.save();
         context.translate(x, y);
         context.rotate(angle * Math.PI / 2);
         
-        // アウトライン（黒縁）
         context.strokeStyle = "rgba(0, 0, 0, 0.8)";
         context.lineWidth = 2;
         context.lineJoin = "round";
@@ -474,12 +469,11 @@
         };
 
         drawTri();
-        context.stroke(); // 縁取り
-        context.fillStyle = "#ffcf00"; // 鮮やかな黄色
-        context.fill(); // 中身
+        context.stroke();
+        context.fillStyle = "#ffcf00";
+        context.fill();
         context.restore();
 
-        // 2. テキスト処理
         let fontSize = (itemW === 1 || itemH === 1) ? 11 : 13;
         context.font = `bold ${fontSize}px sans-serif`;
         context.textAlign = "center";
@@ -773,7 +767,6 @@
         const menuName = document.getElementById('touch-menu-item-name');
         menuName.innerText = item.name;
         
-        // メニュー位置の��算（画面外に出ないように調整）
         const menuWidth = 200;
         const menuHeight = 120;
         let left = x;
