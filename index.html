@@ -228,9 +228,8 @@
             <label>基本操作</label>
             <div class="grid-2">
                 <button class="tool-btn action-btn active" onclick="setMoveMode()" id="btn-move">個別操作</button>
-                <button class="tool-btn action-btn" onclick="setBulkMoveMode()" id="btn-bulk-move">一括操作</button>
                 <button class="tool-btn action-btn" onclick="setEraser()" id="btn-eraser">個別削除</button>
-                <button class="tool-btn action-btn" onclick="confirmClear()" style="color:var(--danger)">一括削除</button>
+                <button class="tool-btn action-btn full-width" onclick="confirmClear()" style="color:var(--danger)">一括削除</button>
             </div>
         </div>
 
@@ -439,7 +438,7 @@
 
     function setTool(config) {
         if (currentTool && currentTool.id === config.id) {
-            if (lastActiveMode === 'bulk') setBulkMoveMode();
+            if (lastActiveMode === 'bulk') setMoveMode();
             else if (lastActiveMode === 'eraser') setEraser();
             else setMoveMode();
             return;
@@ -449,7 +448,6 @@
         renderButtons();
         document.getElementById('btn-eraser').classList.remove('active');
         document.getElementById('btn-move').classList.remove('active');
-        document.getElementById('btn-bulk-move').classList.remove('active');
         selectedGroup = [];
     }
 
@@ -457,7 +455,6 @@
         currentTool = { id: 'eraser' }; lastActiveMode = 'eraser'; renderButtons();
         document.getElementById('btn-eraser').classList.add('active');
         document.getElementById('btn-move').classList.remove('active');
-        document.getElementById('btn-bulk-move').classList.remove('active');
         selectedGroup = [];
     }
 
@@ -465,15 +462,7 @@
         currentTool = null; lastActiveMode = 'move'; renderButtons();
         document.getElementById('btn-eraser').classList.remove('active');
         document.getElementById('btn-move').classList.add('active');
-        document.getElementById('btn-bulk-move').classList.remove('active');
         selectedGroup = [];
-    }
-
-    function setBulkMoveMode() {
-        currentTool = { id: 'bulk' }; lastActiveMode = 'bulk'; renderButtons();
-        document.getElementById('btn-eraser').classList.remove('active');
-        document.getElementById('btn-move').classList.remove('active');
-        document.getElementById('btn-bulk-move').classList.add('active');
     }
 
     function rotateItem(item) {
@@ -508,7 +497,7 @@
         if (e.ctrlKey && key === 'r') { e.preventDefault(); if (!draggingItem) rotateMap(); return; }
         if (key === 'r') {
             if (draggingItem) rotateItem(draggingItem);
-            else if (currentTool && currentTool.id !== 'eraser' && currentTool.id !== 'bulk') rotateItem(currentTool);
+            else if (currentTool && currentTool.id !== 'eraser') rotateItem(currentTool);
         }
     });
 
@@ -568,8 +557,7 @@
         for(let i=0; i<=mapW; i++) { ctx.beginPath(); ctx.moveTo(i*baseGridSize, 0); ctx.lineTo(i*baseGridSize, mapH*baseGridSize); ctx.stroke(); }
         for(let j=0; j<=mapH; j++) { ctx.beginPath(); ctx.moveTo(0, j*baseGridSize); ctx.lineTo(mapW*baseGridSize, j*baseGridSize); ctx.stroke(); }
         
-        const isBulkMode = (currentTool && currentTool.id === 'bulk');
-        const activePreview = draggingItem || (currentTool && currentTool.id !== 'eraser' && !isBulkMode ? currentTool : null);
+        const activePreview = draggingItem || (currentTool && currentTool.id !== 'eraser' ? currentTool : null);
         const px = (activePreview && !selectedGroup.includes(activePreview)) ? Math.min(mapW - activePreview.w, mouseGrid.x) : -100;
         const py = (activePreview && !selectedGroup.includes(activePreview)) ? Math.min(mapH - activePreview.h, mouseGrid.y) : -100;
 
@@ -598,7 +586,7 @@
                     targets.forEach(t => {
                         if (t.x < item.x + 0.5 + item.range && t.x + t.w > item.x + 0.5 - item.range && t.y < item.y + 0.5 + item.range && t.y + t.h > item.y + 0.5 - item.range) showRange = true;
                     });
-                } else if (currentTool && !isBulkMode) {
+                } else if (currentTool) {
                     if (px < item.x + 0.5 + item.range && px + currentTool.w > item.x + 0.5 - item.range && py < item.y + 0.5 + item.range && py + currentTool.h > item.y + 0.5 - item.range) showRange = true;
                 }
 
@@ -614,7 +602,7 @@
             ctx.strokeStyle = '#ffcf00'; ctx.lineWidth = 2/scale; ctx.setLineDash([5/scale, 5/scale]);
             ctx.strokeRect((draggingItem.x-draggingItem.range+0.5)*baseGridSize, (draggingItem.y-draggingItem.range+0.5)*baseGridSize, (draggingItem.range*2)*baseGridSize, (draggingItem.range*2)*baseGridSize);
             ctx.setLineDash([]);
-        } else if(currentTool && !isBulkMode && currentTool.range > 0) {
+        } else if(currentTool && currentTool.range > 0) {
             ctx.strokeStyle = '#ffcf00'; ctx.lineWidth = 2/scale; ctx.setLineDash([5/scale, 5/scale]);
             ctx.strokeRect((px-currentTool.range+0.5)*baseGridSize, (py-currentTool.range+0.5)*baseGridSize, (currentTool.range*2)*baseGridSize, (currentTool.range*2)*baseGridSize);
             ctx.setLineDash([]);
@@ -627,20 +615,6 @@
             ctx.fillRect(px*baseGridSize, py*baseGridSize, activePreview.w*baseGridSize, activePreview.h*baseGridSize);
             ctx.globalAlpha = 1.0;
             drawLabel(ctx, activePreview.name, (px + activePreview.w/2)*baseGridSize, (py + activePreview.h/2)*baseGridSize, activePreview.w, activePreview.h, activePreview.angle || 0);
-        }
-
-        if (isSelecting) {
-            ctx.strokeStyle = varColor('--accent');
-            ctx.lineWidth = 2/scale;
-            ctx.setLineDash([5/scale, 5/scale]);
-            const x = selectionStart.x * baseGridSize;
-            const y = selectionStart.y * baseGridSize;
-            const w = (selectionEnd.x - selectionStart.x) * baseGridSize;
-            const h = (selectionEnd.y - selectionStart.y) * baseGridSize;
-            ctx.strokeRect(x, y, w, h);
-            ctx.fillStyle = 'rgba(255, 207, 0, 0.1)';
-            ctx.fillRect(x, y, w, h);
-            ctx.setLineDash([]);
         }
 
         requestAnimationFrame(draw);
@@ -659,22 +633,12 @@
         if (e.button === 1) { isDraggingMap = true; lastMousePos = { x: e.clientX, y: e.clientY }; mainArea.classList.add('dragging-map'); return; }
         if (e.button === 0) {
             const target = placedItems.find(item => mouseGrid.x >= item.x && mouseGrid.x < item.x + item.w && mouseGrid.y >= item.y && mouseGrid.y < item.y + item.h);
-            if (currentTool && currentTool.id === 'bulk') {
-                if (target) {
-                    if (!selectedGroup.includes(target)) selectedGroup.push(target);
-                    else selectedGroup = selectedGroup.filter(i => i !== target);
-                    draggingItem = target;
-                    bulkDragStart = { x: mouseGrid.x, y: mouseGrid.y };
-                    selectedGroup.forEach(item => item._origPos = { x: item.x, y: item.y });
-                    target._origPos = { x: target.x, y: target.y };
-                } else {
-                    isSelecting = true; selectionStart = { ...mouseGrid }; selectionEnd = { ...mouseGrid }; selectedGroup = [];
-                }
-            } else if (currentTool && currentTool.id === 'eraser') {
+            if (currentTool && currentTool.id === 'eraser') {
                 if (target) { placedItems = placedItems.filter(i => i !== target); updateStats(); autoSave(); }
             } else if (target) {
                 draggingItem = target; dragStartPos = { x: target.x, y: target.y }; mainArea.classList.add('dragging-item');
-            } else if (currentTool && currentTool.id !== 'eraser' && currentTool.id !== 'bulk') {
+                target._origPos = { x: target.x, y: target.y };
+            } else if (currentTool && currentTool.id !== 'eraser') {
                 const px = Math.min(mapW - currentTool.w, mouseGrid.x);
                 const py = Math.min(mapH - currentTool.h, mouseGrid.y);
                 if (!isAreaOccupied(px, py, currentTool.w, currentTool.h)) { 
@@ -696,43 +660,19 @@
         const worldX = (e.clientX - rect.left - offsetX) / scale; const worldY = (e.clientY - rect.top - offsetY) / scale;
         mouseGrid.x = Math.max(0, Math.min(mapW, Math.floor(worldX / baseGridSize)));
         mouseGrid.y = Math.max(0, Math.min(mapH, Math.floor(worldY / baseGridSize)));
-        if (isSelecting) {
-            selectionEnd = { ...mouseGrid };
-        } else if (draggingItem) {
-            if (currentTool && currentTool.id === 'bulk') {
-                const dx = mouseGrid.x - bulkDragStart.x;
-                const dy = mouseGrid.y - bulkDragStart.y;
-                const targets = selectedGroup.includes(draggingItem) ? selectedGroup : [draggingItem];
-                targets.forEach(item => { item.x = item._origPos.x + dx; item.y = item._origPos.y + dy; });
-            } else if (currentTool === null || (currentTool && currentTool.id !== 'bulk')) {
-                draggingItem.x = Math.min(mapW - draggingItem.w, mouseGrid.x);
-                draggingItem.y = Math.min(mapH - draggingItem.h, mouseGrid.y);
-            }
+        if (draggingItem) {
+            draggingItem.x = Math.min(mapW - draggingItem.w, mouseGrid.x);
+            draggingItem.y = Math.min(mapH - draggingItem.h, mouseGrid.y);
         }
         updateStatus();
     });
 
     window.addEventListener('mouseup', () => {
-        if (isSelecting) {
-            const x1 = Math.min(selectionStart.x, selectionEnd.x); const x2 = Math.max(selectionStart.x, selectionEnd.x);
-            const y1 = Math.min(selectionStart.y, selectionEnd.y); const y2 = Math.max(selectionStart.y, selectionEnd.y);
-            selectedGroup = placedItems.filter(item => item.x < x2 && item.x + item.w > x1 && item.y < y2 && item.y + item.h > y1);
-            isSelecting = false;
-        }
         if (draggingItem) {
-            if (currentTool && currentTool.id === 'bulk') {
-                const targets = selectedGroup.includes(draggingItem) ? selectedGroup : [draggingItem];
-                let canPlace = true;
-                targets.forEach(item => {
-                    if (item.x < 0 || item.y < 0 || item.x + item.w > mapW || item.y + item.h > mapH || isAreaOccupied(item.x, item.y, item.w, item.h, item)) canPlace = false;
-                });
-                if (!canPlace) targets.forEach(item => { item.x = item._origPos.x; item.y = item._origPos.y; });
-            } else {
-                const px = Math.min(mapW - draggingItem.w, mouseGrid.x);
-                const py = Math.min(mapH - draggingItem.h, mouseGrid.y);
-                if (!isAreaOccupied(px, py, draggingItem.w, draggingItem.h, draggingItem)) { draggingItem.x = px; draggingItem.y = py; }
-                else { draggingItem.x = dragStartPos.x; draggingItem.y = dragStartPos.y; }
-            }
+            const px = Math.min(mapW - draggingItem.w, mouseGrid.x);
+            const py = Math.min(mapH - draggingItem.h, mouseGrid.y);
+            if (!isAreaOccupied(px, py, draggingItem.w, draggingItem.h, draggingItem)) { draggingItem.x = px; draggingItem.y = py; }
+            else { draggingItem.x = dragStartPos.x; draggingItem.y = dragStartPos.y; }
             draggingItem = null; updateStats(); autoSave();
         }
         isDraggingMap = false; mainArea.classList.remove('dragging-map', 'dragging-item');
@@ -761,36 +701,20 @@
             touchItem = placedItems.find(item => mouseGrid.x >= item.x && mouseGrid.x < item.x + item.w && mouseGrid.y >= item.y && mouseGrid.y < item.y + item.h);
             
             if (touchItem) {
-                // 長押し判定 (0.5秒) - 移動開始
                 longPressTimer = setTimeout(() => {
                     isMovingItem = true;
                     draggingItem = touchItem;
                     mainArea.classList.add('dragging-item');
-                    
-                    if (currentTool && currentTool.id === 'bulk') {
-                        // 一括操作モード時の初期化
-                        bulkDragStart = { ...mouseGrid };
-                        const targets = selectedGroup.includes(touchItem) ? selectedGroup : [touchItem];
-                        targets.forEach(item => item._origPos = { x: item.x, y: item.y });
-                    } else {
-                        // 個別操作モード時の初期化
-                        dragStartPos = { x: touchItem.x, y: touchItem.y };
-                    }
+                    dragStartPos = { x: touchItem.x, y: touchItem.y };
                 }, 500);
 
-                // メニュー表示用 (1秒)
                 menuDisplayTimer = setTimeout(() => {
                     if (!isMovingItem) {
                        showTouchMenu(touchItem, touchStartPos.x, touchStartPos.y);
                     }
                 }, 1000);
-            } else if (!currentTool || currentTool.id === 'eraser' || currentTool.id === null || currentTool.id === 'bulk') {
-                if (currentTool && currentTool.id === 'bulk') {
-                    // 一括モードで何もない場所をタップ: 範囲選択開始
-                    isSelecting = true; selectionStart = { ...mouseGrid }; selectionEnd = { ...mouseGrid }; selectedGroup = [];
-                } else {
-                    isDraggingMap = true; lastMousePos = { x: touch.clientX, y: touch.clientY }; mainArea.classList.add('dragging-map');
-                }
+            } else if (!currentTool || currentTool.id === 'eraser' || currentTool.id === null) {
+                isDraggingMap = true; lastMousePos = { x: touch.clientX, y: touch.clientY }; mainArea.classList.add('dragging-map');
             }
         }
     }, { passive: true });
@@ -814,65 +738,27 @@
         } else if (e.touches.length === 1) {
             const touch = e.touches[0];
             const moveDist = Math.sqrt(Math.pow(touch.clientX - touchStartRawPos.x, 2) + Math.pow(touch.clientY - touchStartRawPos.y, 2));
-            
-            // 遊び(10px)以内且つ長押し前ならキャンセルしないが、大きく動いたら長押しメニューを消す
             if (moveDist > 20) {
                 if (!isMovingItem) clearTimeout(longPressTimer);
                 clearTimeout(menuDisplayTimer);
             }
-
             updateTouchGridPos(touch);
-            if (isSelecting) {
-                selectionEnd = { ...mouseGrid };
-            } else if (isDraggingMap) {
+            if (isDraggingMap) {
                 offsetX += touch.clientX - lastMousePos.x; offsetY += touch.clientY - lastMousePos.y; lastMousePos = { x: touch.clientX, y: touch.clientY };
             } else if (isMovingItem && draggingItem) {
-                if (currentTool && currentTool.id === 'bulk' && selectedGroup.includes(draggingItem)) {
-                    const dx = mouseGrid.x - bulkDragStart.x;
-                    const dy = mouseGrid.y - bulkDragStart.y;
-                    selectedGroup.forEach(item => { item.x = item._origPos.x + dx; item.y = item._origPos.y + dy; });
-                } else {
-                    draggingItem.x = Math.min(mapW - draggingItem.w, mouseGrid.x);
-                    draggingItem.y = Math.min(mapH - draggingItem.h, mouseGrid.y);
-                }
+                draggingItem.x = Math.min(mapW - draggingItem.w, mouseGrid.x);
+                draggingItem.y = Math.min(mapH - draggingItem.h, mouseGrid.y);
             }
             updateStatus();
         }
     }, { passive: false });
 
     mainArea.addEventListener('touchend', (e) => {
-        const touch = e.changedTouches[0];
-        const moveDist = Math.sqrt(Math.pow(touch.clientX - touchStartRawPos.x, 2) + Math.pow(touch.clientY - touchStartRawPos.y, 2));
-
-        // 0.5秒未満且つあまり動いていない場合は「タップ（選択）」として扱う
-        if (!isMovingItem && !isDraggingMap && !isSelecting && moveDist < 15 && touchItem) {
-            if (currentTool && currentTool.id === 'bulk') {
-                if (!selectedGroup.includes(touchItem)) selectedGroup.push(touchItem);
-                else selectedGroup = selectedGroup.filter(i => i !== touchItem);
-                updateStats();
-            }
-        }
-
         clearTimeout(longPressTimer); clearTimeout(menuDisplayTimer);
-        
-        if (isSelecting) {
-            const x1 = Math.min(selectionStart.x, selectionEnd.x); const x2 = Math.max(selectionStart.x, selectionEnd.x);
-            const y1 = Math.min(selectionStart.y, selectionEnd.y); const y2 = Math.max(selectionStart.y, selectionEnd.y);
-            selectedGroup = placedItems.filter(item => item.x < x2 && item.x + item.w > x1 && item.y < y2 && item.y + item.h > y1);
-            isSelecting = false;
-        }
         if (draggingItem && isMovingItem) {
-            if (currentTool && currentTool.id === 'bulk' && selectedGroup.includes(draggingItem)) {
-                let canPlace = true;
-                selectedGroup.forEach(item => {
-                    if (item.x < 0 || item.y < 0 || item.x + item.w > mapW || item.y + item.h > mapH || isAreaOccupied(item.x, item.y, item.w, item.h, item)) canPlace = false;
-                });
-                if (!canPlace) selectedGroup.forEach(item => { item.x = item._origPos.x; item.y = item._origPos.y; });
-            } else {
-                const px = Math.min(mapW - draggingItem.w, mouseGrid.x); const py = Math.min(mapH - draggingItem.h, mouseGrid.y);
-                if (!isAreaOccupied(px, py, draggingItem.w, draggingItem.h, draggingItem)) { draggingItem.x = px; draggingItem.y = py; }
-                else { draggingItem.x = dragStartPos.x; draggingItem.y = dragStartPos.y; }
-            }
+            const px = Math.min(mapW - draggingItem.w, mouseGrid.x); const py = Math.min(mapH - draggingItem.h, mouseGrid.y);
+            if (!isAreaOccupied(px, py, draggingItem.w, draggingItem.h, draggingItem)) { draggingItem.x = px; draggingItem.y = py; }
+            else { draggingItem.x = dragStartPos.x; draggingItem.y = dragStartPos.y; }
             updateStats(); autoSave();
         }
         isDraggingMap = false; isMovingItem = false; draggingItem = null; mainArea.classList.remove('dragging-map', 'dragging-item');
@@ -919,8 +805,8 @@
         const expCanvas = document.getElementById('exportCanvas');
         const expCtx = expCanvas.getContext('2d');
         expCanvas.width = mapW * baseGridSize; expCanvas.height = mapH * baseGridSize;
-        expCtx.fillStyle = varColor('--bg'); expCtx.fillRect(0, 0, expCanvas.width, expCanvas.height);
-        expCtx.strokeStyle = varColor('--grid'); expCtx.lineWidth = 1;
+        expCtx.fillStyle = getComputedStyle(document.body).getPropertyValue('--bg').trim(); expCtx.fillRect(0, 0, expCanvas.width, expCanvas.height);
+        expCtx.strokeStyle = getComputedStyle(document.body).getPropertyValue('--grid').trim(); expCtx.lineWidth = 1;
         for(let i=0; i<=mapW; i++) { expCtx.beginPath(); expCtx.moveTo(i*baseGridSize, 0); expCtx.lineTo(i*baseGridSize, expCanvas.height); expCtx.stroke(); }
         for(let j=0; j<=mapH; j++) { expCtx.beginPath(); expCtx.moveTo(0, j*baseGridSize); expCtx.lineTo(expCanvas.width, j*baseGridSize); expCtx.stroke(); }
         placedItems.forEach(item => { 
