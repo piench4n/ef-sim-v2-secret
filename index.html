@@ -106,7 +106,7 @@
             box-shadow: 0 4px 10px rgba(0,0,0,0.3);
         }
 
-        /* ステータスバー (日本語化・順序変更) */
+        /* ステータスバー */
         #status-bar {
             position: absolute;
             bottom: 15px;
@@ -241,7 +241,7 @@
         }
     }
 
-    // --- 4. 情報更新関数 ---
+    // --- 4. 情報更新関数 (クランプ処理追加) ---
     function updateStatus() {
         const scale = Math.round(stage.scaleX() * 100);
         document.getElementById('val-zoom').innerText = scale + '%';
@@ -252,14 +252,16 @@
                 x: (pointer.x - stage.x()) / stage.scaleX(),
                 y: (pointer.y - stage.y()) / stage.scaleX(),
             };
-            const gridX = Math.floor(mousePointTo.x / GRID_SIZE);
-            const gridY = Math.floor(mousePointTo.y / GRID_SIZE);
 
-            if (gridX >= 0 && gridX <= MAP_BLOCKS && gridY >= 0 && gridY <= MAP_BLOCKS) {
-                document.getElementById('val-pos').innerText = `${gridX}, ${gridY}`;
-            } else {
-                document.getElementById('val-pos').innerText = `エリア外`;
-            }
+            // 座標計算
+            let gridX = Math.floor(mousePointTo.x / GRID_SIZE);
+            let gridY = Math.floor(mousePointTo.y / GRID_SIZE);
+
+            // 【追加】クランプ処理：マイナスを0に、100超えを100に制限
+            gridX = Math.max(0, Math.min(MAP_BLOCKS, gridX));
+            gridY = Math.max(0, Math.min(MAP_BLOCKS, gridY));
+
+            document.getElementById('val-pos').innerText = `${gridX}, ${gridY}`;
         }
     }
 
@@ -268,6 +270,8 @@
         e.evt.preventDefault();
         const oldScale = stage.scaleX();
         const pointer = stage.getPointerPosition();
+        if (!pointer) return;
+        
         const mousePointTo = { x: (pointer.x - stage.x()) / oldScale, y: (pointer.y - stage.y()) / oldScale };
         
         let newScale = e.evt.deltaY > 0 ? oldScale - ZOOM_STEP : oldScale + ZOOM_STEP;
@@ -319,7 +323,6 @@
     loadExternalData();
     handleResize();
     
-    // 初期配置を少し見やすく調整
     stage.position({ x: 20, y: 20 });
     updateStatus();
 </script>
