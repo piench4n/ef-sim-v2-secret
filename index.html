@@ -726,8 +726,6 @@
         if (e.touches.length === 2 && touchStartDist > 0) {
             const currentDist = getTouchDistance(e.touches[0], e.touches[1]);
             const zoomRatio = currentDist / touchStartDist;
-            
-            // 指示：スマホ版（画面幅768px以下）のみ最小縮尺を0.15、PC版を0.30に設定
             const minS = (window.innerWidth <= 768) ? 0.15 : 0.30;
             const newScale = Math.min(Math.max(minS, lastScale * zoomRatio), 1.5);
 
@@ -854,7 +852,16 @@
     function exportData() {
         const code = btoa(unescape(encodeURIComponent(JSON.stringify(placedItems))));
         const dataArea = document.getElementById('data-text');
-        if(dataArea) { dataArea.value = code; showModal('コードを書き出しました。コピーして保存してください。', false); }
+        if(dataArea) { 
+            dataArea.value = code;
+            // クリップボードへコピー
+            navigator.clipboard.writeText(code).then(() => {
+                showModal('コードをコピーしました！', false);
+            }).catch(() => {
+                // 万が一失敗した場合のフォールバック表示
+                showModal('コードを書き出しました。コピーして保存してください。', false);
+            });
+        }
     }
 
     async function loadConfig() {
