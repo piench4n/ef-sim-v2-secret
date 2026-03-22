@@ -264,7 +264,7 @@
         <strong>【PC操作】</strong><br>
         画面移動: ホイール押し込み | 設置/移動: 左クリック/ドラッグ | 削除: 右クリック | 単体回転: R キー | 全体回転: Ctrl+R | ズーム: ホイール<br>
         <strong>【スマホ操作】</strong><br>
-        画面移動: 1本指ドラッグ | 設置/移動: タップ後ドラッグ(0.5秒) | 削除: 長押し(1秒) | ズーム: 2本指ピンチ
+        画面移動: 1本指ドラッグ | 設置/移動: 長押し(0.5秒)後ドラッグ | メニュー: 長押し(1秒) | ズーム: 2本指ピンチ
     </div>
 </div>
 
@@ -315,12 +315,11 @@
     let touchStartDist = 0;
     let lastScale = 0.30;
     let touchItem = null;
-    let touchStartTime = 0;
     let longPressTimer = null;
     let menuDisplayTimer = null;
     let isMovingItem = false;
     let touchStartPos = { x: 0, y: 0 };
-    let touchStartRawPos = { x: 0, y: 0 }; // 遊び判定用
+    let touchStartRawPos = { x: 0, y: 0 };
 
     let isSelecting = false;
     let selectionStart = { x: 0, y: 0 };
@@ -739,26 +738,6 @@
         isDraggingMap = false; mainArea.classList.remove('dragging-map', 'dragging-item');
     });
 
-    mainArea.addEventListener('contextmenu', e => e.preventDefault());
-    mainArea.addEventListener('wheel', (e) => {
-        e.preventDefault();
-        const delta = e.deltaY > 0 ? -0.05 : 0.05;
-        const newScale = Math.min(Math.max(0.30, scale + delta), 1.5);
-        if (newScale !== scale) {
-            const rect = mainArea.getBoundingClientRect();
-            const mx = e.clientX - rect.left; const my = e.clientY - rect.top;
-            offsetX -= (mx - offsetX) * (newScale / scale - 1);
-            offsetY -= (my - offsetY) * (newScale / scale - 1);
-            scale = newScale; updateStatus();
-        }
-    }, { passive: false });
-
-    function getTouchDistance(touch1, touch2) {
-        const dx = touch2.clientX - touch1.clientX;
-        const dy = touch2.clientY - touch1.clientY;
-        return Math.sqrt(dx * dx + dy * dy);
-    }
-
     function updateTouchGridPos(touch) {
         const rect = mainArea.getBoundingClientRect();
         const worldX = (touch.clientX - rect.left - offsetX) / scale;
@@ -777,29 +756,41 @@
         } else if (e.touches.length === 1) {
             const touch = e.touches[0];
             touchStartPos = { x: touch.clientX, y: touch.clientY };
-            touchStartRawPos = { x: touch.clientX, y: touch.clientY }; // 遊び判定用
+            touchStartRawPos = { x: touch.clientX, y: touch.clientY };
             updateTouchGridPos(touch);
             touchItem = placedItems.find(item => mouseGrid.x >= item.x && mouseGrid.x < item.x + item.w && mouseGrid.y >= item.y && mouseGrid.y < item.y + item.h);
             
-            if (currentTool && currentTool.id === 'bulk') {
-                if (touchItem) {
-                    if (!selectedGroup.includes(touchItem)) selectedGroup.push(touchItem);
-                    else selectedGroup = selectedGroup.filter(i => i !== touchItem);
-                    isMovingItem = true; draggingItem = touchItem;
-                    bulkDragStart = { ...mouseGrid };
-                    selectedGroup.forEach(item => item._origPos = { x: item.x, y: item.y });
-                    touchItem._origPos = { x: touchItem.x, y: touchItem.y };
-                } else {
-                    isSelecting = true; selectionStart = { ...mouseGrid }; selectionEnd = { ...mouseGrid }; selectedGroup = [];
-                }
-                return;
-            }
-
             if (touchItem) {
-                longPressTimer = setTimeout(() => { isMovingItem = true; draggingItem = touchItem; dragStartPos = { x: touchItem.x, y: touchItem.y }; mainArea.classList.add('dragging-item'); }, 500);
-                menuDisplayTimer = setTimeout(() => { showTouchMenu(touchItem, touchStartPos.x, touchStartPos.y); isMovingItem = false; draggingItem = null; mainArea.classList.remove('dragging-item'); }, 1000);
-            } else if (!currentTool || currentTool.id === 'eraser' || currentTool.id === null) {
-                isDraggingMap = true; lastMousePos = { x: touch.clientX, y: touch.clientY }; mainArea.classList.add('dragging-map');
+                // 長押し判定 (0.5秒) - 移動開始
+                longPressTimer = setTimeout(() => {
+                    isMovingItem = true;
+                    draggingItem = touchItem;
+                    mainArea.classList.add('dragging-item');
+                    
+                    if (currentTool && currentTool.id === 'bulk') {
+                        // 一括操作モード時の初期化
+                        bulkDragStart = { ...mouseGrid };
+                        const targets = selectedGroup.includes(touchItem) ? selectedGroup : [touchItem];
+                        targets.forEach(item => item._origPos = { x: item.x, y: item.y });
+                    } else {
+                        // 個別操作モード時の初期化
+                        dragStartPos = { x: touchItem.x, y: touchItem.y };
+                    }
+                }, 500);
+
+                // メニュー表示用 (1秒)
+                menuDisplayTimer = setTimeout(() => {
+                    if (!isMovingItem) {
+                       showTouchMenu(touchItem, touchStartPos.x, touchStartPos.y);
+                    }
+                }, 1000);
+            } else if (!currentTool || currentTool.id === 'eraser' || currentTool.id === null || currentTool.id === 'bulk') {
+                if (currentTool && currentTool.id === 'bulk') {
+                    // 一括モードで何もない場所をタップ: 範囲選択開始
+                    isSelecting = true; selectionStart = { ...mouseGrid }; selectionEnd = { ...mouseGrid }; selectedGroup = [];
+                } else {
+                    isDraggingMap = true; lastMousePos = { x: touch.clientX, y: touch.clientY }; mainArea.classList.add('dragging-map');
+                }
             }
         }
     }, { passive: true });
@@ -813,36 +804,34 @@
             const newScale = Math.min(Math.max(minS, lastScale * zoomRatio), 1.5);
             if (newScale !== scale) {
                 const rect = mainArea.getBoundingClientRect();
-                const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-                const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-                const mx = centerX - rect.left; const my = centerY - rect.top;
+                const mx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left;
+                const my = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top;
                 offsetX -= (mx - offsetX) * (newScale / scale - 1);
                 offsetY -= (my - offsetY) * (newScale / scale - 1);
                 scale = newScale; updateStatus();
             }
-            clearTimeout(menuDisplayTimer); clearTimeout(longPressTimer);
+            clearTimeout(longPressTimer); clearTimeout(menuDisplayTimer);
         } else if (e.touches.length === 1) {
             const touch = e.touches[0];
             const moveDist = Math.sqrt(Math.pow(touch.clientX - touchStartRawPos.x, 2) + Math.pow(touch.clientY - touchStartRawPos.y, 2));
             
-            // 遊び(10px)以内なら移動処理を行わない
-            if (!isMovingItem && !isDraggingMap && !isSelecting && moveDist < 10) return;
+            // 遊び(10px)以内且つ長押し前ならキャンセルしないが、大きく動いたら長押しメニューを消す
+            if (moveDist > 20) {
+                if (!isMovingItem) clearTimeout(longPressTimer);
+                clearTimeout(menuDisplayTimer);
+            }
 
-            const distFromStart = Math.sqrt(Math.pow(touch.clientX - touchStartPos.x, 2) + Math.pow(touch.clientY - touchStartPos.y, 2));
-            if (distFromStart > 30) clearTimeout(menuDisplayTimer);
-            
             updateTouchGridPos(touch);
             if (isSelecting) {
                 selectionEnd = { ...mouseGrid };
             } else if (isDraggingMap) {
                 offsetX += touch.clientX - lastMousePos.x; offsetY += touch.clientY - lastMousePos.y; lastMousePos = { x: touch.clientX, y: touch.clientY };
             } else if (isMovingItem && draggingItem) {
-                if (currentTool && currentTool.id === 'bulk') {
+                if (currentTool && currentTool.id === 'bulk' && selectedGroup.includes(draggingItem)) {
                     const dx = mouseGrid.x - bulkDragStart.x;
                     const dy = mouseGrid.y - bulkDragStart.y;
-                    const targets = selectedGroup.includes(draggingItem) ? selectedGroup : [draggingItem];
-                    targets.forEach(item => { item.x = item._origPos.x + dx; item.y = item._origPos.y + dy; });
-                } else if (!currentTool || currentTool.id !== 'bulk') {
+                    selectedGroup.forEach(item => { item.x = item._origPos.x + dx; item.y = item._origPos.y + dy; });
+                } else {
                     draggingItem.x = Math.min(mapW - draggingItem.w, mouseGrid.x);
                     draggingItem.y = Math.min(mapH - draggingItem.h, mouseGrid.y);
                 }
@@ -852,7 +841,20 @@
     }, { passive: false });
 
     mainArea.addEventListener('touchend', (e) => {
+        const touch = e.changedTouches[0];
+        const moveDist = Math.sqrt(Math.pow(touch.clientX - touchStartRawPos.x, 2) + Math.pow(touch.clientY - touchStartRawPos.y, 2));
+
+        // 0.5秒未満且つあまり動いていない場合は「タップ（選択）」として扱う
+        if (!isMovingItem && !isDraggingMap && !isSelecting && moveDist < 15 && touchItem) {
+            if (currentTool && currentTool.id === 'bulk') {
+                if (!selectedGroup.includes(touchItem)) selectedGroup.push(touchItem);
+                else selectedGroup = selectedGroup.filter(i => i !== touchItem);
+                updateStats();
+            }
+        }
+
         clearTimeout(longPressTimer); clearTimeout(menuDisplayTimer);
+        
         if (isSelecting) {
             const x1 = Math.min(selectionStart.x, selectionEnd.x); const x2 = Math.max(selectionStart.x, selectionEnd.x);
             const y1 = Math.min(selectionStart.y, selectionEnd.y); const y2 = Math.max(selectionStart.y, selectionEnd.y);
@@ -860,13 +862,12 @@
             isSelecting = false;
         }
         if (draggingItem && isMovingItem) {
-            if (currentTool && currentTool.id === 'bulk') {
-                const targets = selectedGroup.includes(draggingItem) ? selectedGroup : [draggingItem];
+            if (currentTool && currentTool.id === 'bulk' && selectedGroup.includes(draggingItem)) {
                 let canPlace = true;
-                targets.forEach(item => {
+                selectedGroup.forEach(item => {
                     if (item.x < 0 || item.y < 0 || item.x + item.w > mapW || item.y + item.h > mapH || isAreaOccupied(item.x, item.y, item.w, item.h, item)) canPlace = false;
                 });
-                if (!canPlace) targets.forEach(item => { item.x = item._origPos.x; item.y = item._origPos.y; });
+                if (!canPlace) selectedGroup.forEach(item => { item.x = item._origPos.x; item.y = item._origPos.y; });
             } else {
                 const px = Math.min(mapW - draggingItem.w, mouseGrid.x); const py = Math.min(mapH - draggingItem.h, mouseGrid.y);
                 if (!isAreaOccupied(px, py, draggingItem.w, draggingItem.h, draggingItem)) { draggingItem.x = px; draggingItem.y = py; }
@@ -876,6 +877,12 @@
         }
         isDraggingMap = false; isMovingItem = false; draggingItem = null; mainArea.classList.remove('dragging-map', 'dragging-item');
     }, { passive: true });
+
+    function getTouchDistance(touch1, touch2) {
+        const dx = touch2.clientX - touch1.clientX;
+        const dy = touch2.clientY - touch1.clientY;
+        return Math.sqrt(dx * dx + dy * dy);
+    }
 
     function showTouchMenu(item, x, y) {
         const menu = document.getElementById('touch-menu');
