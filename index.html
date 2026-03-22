@@ -229,13 +229,13 @@
             <div class="grid-2">
                 <button class="tool-btn action-btn active" onclick="setMoveMode()" id="btn-move">個別操作</button>
                 <button class="tool-btn action-btn" onclick="setBulkMoveMode()" id="btn-bulk-move">一括操作</button>
-                <button class="tool-btn action-btn" onclick="setEraser()" id="btn-eraser">削除モード</button>
-                <button class="tool-btn action-btn" onclick="confirmClear()" style="color:var(--danger)">すべて削除</button>
+                <button class="tool-btn action-btn" onclick="setEraser()" id="btn-eraser">個別削除</button>
+                <button class="tool-btn action-btn" onclick="confirmClear()" style="color:var(--danger)">一括削除</button>
             </div>
         </div>
 
         <div class="tool-group">
-            <label>マップ設定</label>
+            <label>マップサイズ</label>
             <select id="map-ratio" onchange="changeMapRatio(this.value)">
                 <option value="80:80">80 × 80</option>
                 <option value="70:70">70 × 70</option>
@@ -321,7 +321,6 @@
     let isMovingItem = false;
     let touchStartPos = { x: 0, y: 0 };
 
-    // 新機能用変数
     let isSelecting = false;
     let selectionStart = { x: 0, y: 0 };
     let selectionEnd = { x: 0, y: 0 };
@@ -602,7 +601,6 @@
             drawLabel(ctx, activePreview.name, (px + activePreview.w/2)*baseGridSize, (py + activePreview.h/2)*baseGridSize, activePreview.w, activePreview.h, activePreview.angle || 0);
         }
 
-        // 範囲選択枠の描画
         if (isSelecting) {
             ctx.strokeStyle = varColor('--accent');
             ctx.lineWidth = 2/scale;
@@ -630,7 +628,6 @@
     }
 
     mainArea.addEventListener('mousedown', (e) => {
-        const rect = mainArea.getBoundingClientRect();
         if (e.button === 1) { isDraggingMap = true; lastMousePos = { x: e.clientX, y: e.clientY }; mainArea.classList.add('dragging-map'); return; }
         
         if (e.button === 0) {
@@ -638,18 +635,15 @@
             
             if (currentTool && currentTool.id === 'bulk') {
                 if (target) {
-                    // 施設をクリック
                     if (selectedGroup.includes(target)) {
                         selectedGroup = selectedGroup.filter(i => i !== target);
                     } else {
                         selectedGroup.push(target);
                     }
-                    // ドラッグ準備
                     draggingItem = target;
                     bulkDragStart = { x: mouseGrid.x, y: mouseGrid.y };
                     selectedGroup.forEach(item => item._origPos = { x: item.x, y: item.y });
                 } else {
-                    // 何もない場所で範囲選択開始
                     isSelecting = true;
                     selectionStart = { ...mouseGrid };
                     selectionEnd = { ...mouseGrid };
@@ -712,7 +706,6 @@
 
         if (draggingItem) {
             if (currentTool && currentTool.id === 'bulk') {
-                // 一括移動の確定判定
                 let canPlace = true;
                 selectedGroup.forEach(item => {
                     if (item.x < 0 || item.y < 0 || item.x + item.w > mapW || item.y + item.h > mapH ||
