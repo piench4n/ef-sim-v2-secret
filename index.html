@@ -227,9 +227,10 @@
         <div class="tool-group">
             <label>基本操作</label>
             <div class="grid-2">
-                <button class="tool-btn action-btn active" onclick="setMoveMode()" id="btn-move">移動モード</button>
+                <button class="tool-btn action-btn active" onclick="setMoveMode()" id="btn-move">個別操作</button>
+                <button class="tool-btn action-btn" onclick="setBulkMoveMode()" id="btn-bulk-move">一括操作</button>
                 <button class="tool-btn action-btn" onclick="setEraser()" id="btn-eraser">削除モード</button>
-                <button class="tool-btn action-btn full-width" onclick="confirmClear()" style="color:var(--danger)">すべて削除</button>
+                <button class="tool-btn action-btn" onclick="confirmClear()" style="color:var(--danger)">すべて削除</button>
             </div>
         </div>
 
@@ -320,6 +321,13 @@
     let isMovingItem = false;
     let touchStartPos = { x: 0, y: 0 };
 
+    // 新機能用変数
+    let isSelecting = false;
+    let selectionStart = { x: 0, y: 0 };
+    let selectionEnd = { x: 0, y: 0 };
+    let selectedGroup = [];
+    let bulkDragStart = { x: 0, y: 0 };
+
     function updateMobileSidebarHeight() {
         if (window.innerWidth <= 768) {
             const sidebar = document.getElementById('sidebar');
@@ -342,7 +350,7 @@
 
     function confirmClear() {
         showModal('配置したすべての設備を削除しますか？', true, () => {
-            placedItems = []; updateStats(); autoSave();
+            placedItems = []; selectedGroup = []; updateStats(); autoSave();
         });
     }
 
@@ -352,7 +360,7 @@
         showModal('設計図を読み込みますか？現在の配置は上書きされます。', true, () => {
             try {
                 const decoded = JSON.parse(decodeURIComponent(escape(atob(dataArea.value))));
-                placedItems = decoded; updateStats(); autoSave();
+                placedItems = decoded; selectedGroup = []; updateStats(); autoSave();
             } catch (e) { showModal('無効なコードです', false); }
         });
     }
@@ -362,11 +370,8 @@
         mapW = w; mapH = h;
         canvas.width = mapW * baseGridSize;
         canvas.height = mapH * baseGridSize;
-        
-        // セレクトボックスの値と同期
         const selector = document.getElementById('map-ratio');
         if(selector.value !== val) selector.value = val;
-        
         centerMap();
     }
 
@@ -419,35 +424,6 @@
         setTimeout(updateMobileSidebarHeight, 50);
     }
 
-    async function loadConfig() {
-        try {
-            const response = await fetch('data.json?t=' + new Date().getTime());
-            const data = await response.json();
-            allBuildings = data.buildings || [];
-            const cats = [...new Set(allBuildings.map(b => b.category).filter(c => c))];
-            const catContainer = document.getElementById('category-filters');
-            cats.forEach(c => {
-                const btn = document.createElement('button');
-                btn.className = 'cat-btn';
-                btn.innerText = c;
-                btn.onclick = () => filterCategory(c);
-                catContainer.appendChild(btn);
-            });
-            
-            // 初期サイズを 80:80 (リストの先頭) に変更
-            changeMapRatio("80:80"); 
-            renderButtons(); autoLoad(); updateStats();
-            
-            const btn = document.getElementById('toggle-sidebar');
-            if (window.innerWidth <= 768) {
-                btn.innerText = '▲';
-            } else {
-                btn.innerText = '◀';
-            }
-            setTimeout(updateMobileSidebarHeight, 500);
-        } catch (err) { document.getElementById('buildings-container').innerHTML = "JSON読み込みエラー"; }
-    }
-
     function renderButtons() {
         const container = document.getElementById('buildings-container');
         if(!container) return;
@@ -475,18 +451,31 @@
         renderButtons();
         document.getElementById('btn-eraser').classList.remove('active');
         document.getElementById('btn-move').classList.remove('active');
+        document.getElementById('btn-bulk-move').classList.remove('active');
+        selectedGroup = [];
     }
 
     function setEraser() {
         currentTool = { id: 'eraser' }; renderButtons();
         document.getElementById('btn-eraser').classList.add('active');
         document.getElementById('btn-move').classList.remove('active');
+        document.getElementById('btn-bulk-move').classList.remove('active');
+        selectedGroup = [];
     }
 
     function setMoveMode() {
         currentTool = null; renderButtons();
         document.getElementById('btn-eraser').classList.remove('active');
         document.getElementById('btn-move').classList.add('active');
+        document.getElementById('btn-bulk-move').classList.remove('active');
+        selectedGroup = [];
+    }
+
+    function setBulkMoveMode() {
+        currentTool = { id: 'bulk' }; renderButtons();
+        document.getElementById('btn-eraser').classList.remove('active');
+        document.getElementById('btn-move').classList.remove('active');
+        document.getElementById('btn-bulk-move').classList.add('active');
     }
 
     function rotateItem(item) {
@@ -521,14 +510,13 @@
         if (e.ctrlKey && key === 'r') { e.preventDefault(); if (!draggingItem) rotateMap(); return; }
         if (key === 'r') {
             if (draggingItem) rotateItem(draggingItem);
-            else if (currentTool && currentTool.id !== 'eraser') rotateItem(currentTool);
+            else if (currentTool && currentTool.id !== 'eraser' && currentTool.id !== 'bulk') rotateItem(currentTool);
         }
     });
 
     function drawLabel(context, text, x, y, itemW, itemH, angle = 0) {
         const pxW = itemW * baseGridSize;
         const pxH = itemH * baseGridSize;
-        const padding = 2;
         context.save();
         context.translate(x, y);
         context.rotate(angle * Math.PI / 2);
@@ -581,29 +569,30 @@
         ctx.lineWidth = 1/scale;
         for(let i=0; i<=mapW; i++) { ctx.beginPath(); ctx.moveTo(i*baseGridSize, 0); ctx.lineTo(i*baseGridSize, mapH*baseGridSize); ctx.stroke(); }
         for(let j=0; j<=mapH; j++) { ctx.beginPath(); ctx.moveTo(0, j*baseGridSize); ctx.lineTo(mapW*baseGridSize, j*baseGridSize); ctx.stroke(); }
-        const activePreview = draggingItem || (currentTool && currentTool.id !== 'eraser' ? currentTool : null);
+        
+        const activePreview = draggingItem || (currentTool && currentTool.id !== 'eraser' && currentTool.id !== 'bulk' ? currentTool : null);
         const px = activePreview ? Math.min(mapW - activePreview.w, mouseGrid.x) : -100;
         const py = activePreview ? Math.min(mapH - activePreview.h, mouseGrid.y) : -100;
+
         placedItems.forEach(item => {
-            ctx.fillStyle = item.color; ctx.globalAlpha = (item === draggingItem) ? 0.15 : 0.8;
+            const isDragging = (item === draggingItem || selectedGroup.includes(item) && draggingItem);
+            const isSelected = selectedGroup.includes(item);
+            ctx.fillStyle = item.color; 
+            ctx.globalAlpha = isDragging ? 0.3 : 0.8;
             ctx.fillRect(item.x*baseGridSize+1, item.y*baseGridSize+1, item.w*baseGridSize-2, item.h*baseGridSize-2);
-            if (item !== draggingItem) {
+            
+            if (isSelected) {
+                ctx.strokeStyle = varColor('--accent');
+                ctx.lineWidth = 3/scale;
+                ctx.strokeRect(item.x*baseGridSize+2, item.y*baseGridSize+2, item.w*baseGridSize-4, item.h*baseGridSize-4);
+            }
+
+            if (!isDragging) {
                 ctx.globalAlpha = 1.0;
                 drawLabel(ctx, item.name, (item.x + item.w/2)*baseGridSize, (item.y + item.h/2)*baseGridSize, item.w, item.h, item.angle || 0);
             }
-            if(item.range > 0 && item !== draggingItem) {
-                let show = false;
-                if(activePreview) {
-                    const cx = item.x + 0.5; const cy = item.y + 0.5;
-                    if (px < cx + item.range && px + activePreview.w > cx - item.range && py < cy + item.range && py + activePreview.h > cy - item.range) show = true;
-                }
-                if(show) {
-                    ctx.strokeStyle = '#ffcf00'; ctx.lineWidth = 2/scale; ctx.setLineDash([5/scale, 5/scale]);
-                    ctx.strokeRect((item.x-item.range+0.5)*baseGridSize, (item.y-item.range+0.5)*baseGridSize, (item.range*2)*baseGridSize, (item.range*2)*baseGridSize);
-                    ctx.setLineDash([]);
-                }
-            }
         });
+
         if(activePreview) {
             ctx.globalAlpha = 0.5;
             const occupied = isAreaOccupied(px, py, activePreview.w, activePreview.h, draggingItem);
@@ -611,24 +600,62 @@
             ctx.fillRect(px*baseGridSize, py*baseGridSize, activePreview.w*baseGridSize, activePreview.h*baseGridSize);
             ctx.globalAlpha = 1.0;
             drawLabel(ctx, activePreview.name, (px + activePreview.w/2)*baseGridSize, (py + activePreview.h/2)*baseGridSize, activePreview.w, activePreview.h, activePreview.angle || 0);
-            if(activePreview.range > 0) {
-                ctx.strokeStyle = '#ffcf00'; ctx.lineWidth = 2/scale; ctx.setLineDash([5/scale, 5/scale]);
-                ctx.strokeRect((px-activePreview.range+0.5)*baseGridSize, (py-activePreview.range+0.5)*baseGridSize, (activePreview.range*2)*baseGridSize, (activePreview.range*2)*baseGridSize);
-                ctx.setLineDash([]);
-            }
         }
+
+        // 範囲選択枠の描画
+        if (isSelecting) {
+            ctx.strokeStyle = varColor('--accent');
+            ctx.lineWidth = 2/scale;
+            ctx.setLineDash([5/scale, 5/scale]);
+            const x = selectionStart.x * baseGridSize;
+            const y = selectionStart.y * baseGridSize;
+            const w = (selectionEnd.x - selectionStart.x) * baseGridSize;
+            const h = (selectionEnd.y - selectionStart.y) * baseGridSize;
+            ctx.strokeRect(x, y, w, h);
+            ctx.fillStyle = 'rgba(255, 207, 0, 0.1)';
+            ctx.fillRect(x, y, w, h);
+            ctx.setLineDash([]);
+        }
+
         requestAnimationFrame(draw);
     }
 
+    function varColor(name) { return getComputedStyle(document.body).getPropertyValue(name).trim(); }
+
     function isAreaOccupied(x, y, w, h, ignoreItem = null) {
+        if (selectedGroup.length > 0 && selectedGroup.includes(ignoreItem)) {
+            return placedItems.some(item => !selectedGroup.includes(item) && (x < item.x + item.w && x + w > item.x && y < item.y + item.h && y + h > item.y));
+        }
         return placedItems.some(item => (item !== ignoreItem) && (x < item.x + item.w && x + w > item.x && y < item.y + item.h && y + h > item.y));
     }
 
     mainArea.addEventListener('mousedown', (e) => {
+        const rect = mainArea.getBoundingClientRect();
         if (e.button === 1) { isDraggingMap = true; lastMousePos = { x: e.clientX, y: e.clientY }; mainArea.classList.add('dragging-map'); return; }
+        
         if (e.button === 0) {
             const target = placedItems.find(item => mouseGrid.x >= item.x && mouseGrid.x < item.x + item.w && mouseGrid.y >= item.y && mouseGrid.y < item.y + item.h);
-            if (currentTool && currentTool.id === 'eraser') {
+            
+            if (currentTool && currentTool.id === 'bulk') {
+                if (target) {
+                    // 施設をクリック
+                    if (selectedGroup.includes(target)) {
+                        selectedGroup = selectedGroup.filter(i => i !== target);
+                    } else {
+                        selectedGroup.push(target);
+                    }
+                    // ドラッグ準備
+                    draggingItem = target;
+                    bulkDragStart = { x: mouseGrid.x, y: mouseGrid.y };
+                    selectedGroup.forEach(item => item._origPos = { x: item.x, y: item.y });
+                } else {
+                    // 何もない場所で範囲選択開始
+                    isSelecting = true;
+                    selectionStart = { ...mouseGrid };
+                    selectionEnd = { ...mouseGrid };
+                    selectedGroup = [];
+                }
+            } else if (currentTool && currentTool.id === 'eraser') {
                 if (target) { placedItems = placedItems.filter(i => i !== target); updateStats(); autoSave(); }
             } else if (target) {
                 draggingItem = target; dragStartPos = { x: target.x, y: target.y }; mainArea.classList.add('dragging-item');
@@ -654,15 +681,57 @@
         const worldX = (e.clientX - rect.left - offsetX) / scale; const worldY = (e.clientY - rect.top - offsetY) / scale;
         mouseGrid.x = Math.max(0, Math.min(mapW, Math.floor(worldX / baseGridSize)));
         mouseGrid.y = Math.max(0, Math.min(mapH, Math.floor(worldY / baseGridSize)));
+        
+        if (isSelecting) {
+            selectionEnd = { ...mouseGrid };
+        }
+
+        if (draggingItem && currentTool && currentTool.id === 'bulk') {
+            const dx = mouseGrid.x - bulkDragStart.x;
+            const dy = mouseGrid.y - bulkDragStart.y;
+            selectedGroup.forEach(item => {
+                item.x = item._origPos.x + dx;
+                item.y = item._origPos.y + dy;
+            });
+        }
+
         updateStatus();
     });
 
     window.addEventListener('mouseup', () => {
+        if (isSelecting) {
+            const x1 = Math.min(selectionStart.x, selectionEnd.x);
+            const x2 = Math.max(selectionStart.x, selectionEnd.x);
+            const y1 = Math.min(selectionStart.y, selectionEnd.y);
+            const y2 = Math.max(selectionStart.y, selectionEnd.y);
+            selectedGroup = placedItems.filter(item => 
+                item.x < x2 && item.x + item.w > x1 && item.y < y2 && item.y + item.h > y1
+            );
+            isSelecting = false;
+        }
+
         if (draggingItem) {
-            const px = Math.min(mapW - draggingItem.w, mouseGrid.x);
-            const py = Math.min(mapH - draggingItem.h, mouseGrid.y);
-            if (!isAreaOccupied(px, py, draggingItem.w, draggingItem.h, draggingItem)) { draggingItem.x = px; draggingItem.y = py; }
-            else { draggingItem.x = dragStartPos.x; draggingItem.y = dragStartPos.y; }
+            if (currentTool && currentTool.id === 'bulk') {
+                // 一括移動の確定判定
+                let canPlace = true;
+                selectedGroup.forEach(item => {
+                    if (item.x < 0 || item.y < 0 || item.x + item.w > mapW || item.y + item.h > mapH ||
+                        isAreaOccupied(item.x, item.y, item.w, item.h, item)) {
+                        canPlace = false;
+                    }
+                });
+                if (!canPlace) {
+                    selectedGroup.forEach(item => {
+                        item.x = item._origPos.x;
+                        item.y = item._origPos.y;
+                    });
+                }
+            } else {
+                const px = Math.min(mapW - draggingItem.w, mouseGrid.x);
+                const py = Math.min(mapH - draggingItem.h, mouseGrid.y);
+                if (!isAreaOccupied(px, py, draggingItem.w, draggingItem.h, draggingItem)) { draggingItem.x = px; draggingItem.y = py; }
+                else { draggingItem.x = dragStartPos.x; draggingItem.y = dragStartPos.y; }
+            }
             draggingItem = null; updateStats(); autoSave();
         }
         isDraggingMap = false; mainArea.classList.remove('dragging-map', 'dragging-item');
@@ -712,6 +781,27 @@
             touchItem = placedItems.find(item => mouseGrid.x >= item.x && mouseGrid.x < item.x + item.w && mouseGrid.y >= item.y && mouseGrid.y < item.y + item.h);
             touchStartTime = Date.now();
             isMovingItem = false;
+
+            if (currentTool && currentTool.id === 'bulk') {
+                if (touchItem) {
+                    if (selectedGroup.includes(touchItem)) {
+                        selectedGroup = selectedGroup.filter(i => i !== touchItem);
+                    } else {
+                        selectedGroup.push(touchItem);
+                    }
+                    isMovingItem = true;
+                    draggingItem = touchItem;
+                    bulkDragStart = { ...mouseGrid };
+                    selectedGroup.forEach(item => item._origPos = { x: item.x, y: item.y });
+                } else {
+                    isSelecting = true;
+                    selectionStart = { ...mouseGrid };
+                    selectionEnd = { ...mouseGrid };
+                    selectedGroup = [];
+                }
+                return;
+            }
+
             if (touchItem) {
                 longPressTimer = setTimeout(() => {
                     isMovingItem = true;
@@ -762,13 +852,25 @@
                 clearTimeout(menuDisplayTimer);
             }
             updateTouchGridPos(touch);
-            if (isDraggingMap) {
+
+            if (isSelecting) {
+                selectionEnd = { ...mouseGrid };
+            } else if (isDraggingMap) {
                 offsetX += touch.clientX - lastMousePos.x;
                 offsetY += touch.clientY - lastMousePos.y;
                 lastMousePos = { x: touch.clientX, y: touch.clientY };
             } else if (isMovingItem && draggingItem) {
-                draggingItem.x = Math.min(mapW - draggingItem.w, mouseGrid.x);
-                draggingItem.y = Math.min(mapH - draggingItem.h, mouseGrid.y);
+                if (currentTool && currentTool.id === 'bulk') {
+                    const dx = mouseGrid.x - bulkDragStart.x;
+                    const dy = mouseGrid.y - bulkDragStart.y;
+                    selectedGroup.forEach(item => {
+                        item.x = item._origPos.x + dx;
+                        item.y = item._origPos.y + dy;
+                    });
+                } else {
+                    draggingItem.x = Math.min(mapW - draggingItem.w, mouseGrid.x);
+                    draggingItem.y = Math.min(mapH - draggingItem.h, mouseGrid.y);
+                }
             }
             updateStatus();
         }
@@ -777,16 +879,43 @@
     mainArea.addEventListener('touchend', (e) => {
         clearTimeout(longPressTimer);
         clearTimeout(menuDisplayTimer);
-        touchStartDist = 0;
+        
+        if (isSelecting) {
+            const x1 = Math.min(selectionStart.x, selectionEnd.x);
+            const x2 = Math.max(selectionStart.x, selectionEnd.x);
+            const y1 = Math.min(selectionStart.y, selectionEnd.y);
+            const y2 = Math.max(selectionStart.y, selectionEnd.y);
+            selectedGroup = placedItems.filter(item => 
+                item.x < x2 && item.x + item.w > x1 && item.y < y2 && item.y + item.h > y1
+            );
+            isSelecting = false;
+        }
+
         if (draggingItem && isMovingItem) {
-            const px = Math.min(mapW - draggingItem.w, mouseGrid.x);
-            const py = Math.min(mapH - draggingItem.h, mouseGrid.y);
-            if (!isAreaOccupied(px, py, draggingItem.w, draggingItem.h, draggingItem)) {
-                draggingItem.x = px;
-                draggingItem.y = py;
+            if (currentTool && currentTool.id === 'bulk') {
+                let canPlace = true;
+                selectedGroup.forEach(item => {
+                    if (item.x < 0 || item.y < 0 || item.x + item.w > mapW || item.y + item.h > mapH ||
+                        isAreaOccupied(item.x, item.y, item.w, item.h, item)) {
+                        canPlace = false;
+                    }
+                });
+                if (!canPlace) {
+                    selectedGroup.forEach(item => {
+                        item.x = item._origPos.x;
+                        item.y = item._origPos.y;
+                    });
+                }
             } else {
-                draggingItem.x = dragStartPos.x;
-                draggingItem.y = dragStartPos.y;
+                const px = Math.min(mapW - draggingItem.w, mouseGrid.x);
+                const py = Math.min(mapH - draggingItem.h, mouseGrid.y);
+                if (!isAreaOccupied(px, py, draggingItem.w, draggingItem.h, draggingItem)) {
+                    draggingItem.x = px;
+                    draggingItem.y = py;
+                } else {
+                    draggingItem.x = dragStartPos.x;
+                    draggingItem.y = dragStartPos.y;
+                }
             }
             updateStats();
             autoSave();
@@ -818,6 +947,7 @@
     function deleteTouchItem() {
         if (touchItem) {
             placedItems = placedItems.filter(i => i !== touchItem);
+            selectedGroup = selectedGroup.filter(i => i !== touchItem);
             updateStats();
             autoSave();
             closeTouchMenu();
@@ -847,12 +977,12 @@
         const expCanvas = document.getElementById('exportCanvas');
         const expCtx = expCanvas.getContext('2d');
         expCanvas.width = mapW * baseGridSize; expCanvas.height = mapH * baseGridSize;
-        expCtx.fillStyle = getComputedStyle(document.body).getPropertyValue('--bg').trim();
+        expCtx.fillStyle = varColor('--bg');
         expCtx.fillRect(0, 0, expCanvas.width, expCanvas.height);
-        expCtx.strokeStyle = getComputedStyle(document.body).getPropertyValue('--grid').trim();
+        expCtx.strokeStyle = varColor('--grid');
         expCtx.lineWidth = 1;
         for(let i=0; i<=mapW; i++) { expCtx.beginPath(); expCtx.moveTo(i*baseGridSize, 0); expCtx.lineTo(i*baseGridSize, expCanvas.height); expCtx.stroke(); }
-        for(let j=0; j<=mapH; j++) { expCtx.beginPath(); expCtx.moveTo(0, j*baseGridSize); ctx.lineTo(expCanvas.width, j*baseGridSize); expCtx.stroke(); }
+        for(let j=0; j<=mapH; j++) { expCtx.beginPath(); expCtx.moveTo(0, j*baseGridSize); expCtx.lineTo(expCanvas.width, j*baseGridSize); expCtx.stroke(); }
         placedItems.forEach(item => { 
             expCtx.fillStyle = item.color; expCtx.globalAlpha = 0.9; 
             expCtx.fillRect(item.x*baseGridSize+1, item.y*baseGridSize+1, item.w*baseGridSize-2, item.h*baseGridSize-2); 
@@ -900,17 +1030,10 @@
                 btn.onclick = () => filterCategory(c);
                 catContainer.appendChild(btn);
             });
-            
-            // リストの先頭である 80 × 80 で初期化
             changeMapRatio("80:80"); 
-            
             renderButtons(); autoLoad(); updateStats();
             const btn = document.getElementById('toggle-sidebar');
-            if (window.innerWidth <= 768) {
-                btn.innerText = '▲';
-            } else {
-                btn.innerText = '◀';
-            }
+            btn.innerText = (window.innerWidth <= 768) ? '▲' : '◀';
             setTimeout(updateMobileSidebarHeight, 500);
         } catch (err) { document.getElementById('buildings-container').innerHTML = "JSON読み込みエラー"; }
     }
@@ -920,11 +1043,7 @@
         updateMobileSidebarHeight();
         const btn = document.getElementById('toggle-sidebar');
         const isClosed = document.body.classList.contains('sidebar-closed');
-        if (window.innerWidth <= 768) {
-            btn.innerText = isClosed ? '▼' : '▲';
-        } else {
-            btn.innerText = isClosed ? '▶' : '◀';
-        }
+        btn.innerText = (window.innerWidth <= 768) ? (isClosed ? '▼' : '▲') : (isClosed ? '▶' : '◀');
     });
     
     loadConfig(); 
