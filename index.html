@@ -25,6 +25,7 @@
             color: var(--text-color);
             font-family: 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif;
             overflow: hidden;
+            touch-action: none; /* スマホのブラウザ標準ズームを無効化 */
         }
 
         /* サイドバー */
@@ -68,6 +69,7 @@
             cursor: pointer;
             transition: all 0.2s;
             border: 1px solid transparent;
+            user-select: none;
         }
 
         .sidebar-item:hover {
@@ -91,8 +93,7 @@
             flex-grow: 1;
             position: relative;
             overflow: hidden;
-            background-image: radial-gradient(#2a2d31 1px, transparent 1px);
-            background-size: 40px 40px; /* 目安のドット背景 */
+            background-color: #111;
         }
 
         /* UIボタン */
@@ -111,7 +112,6 @@
             box-shadow: 0 4px 10px rgba(0,0,0,0.3);
         }
 
-        /* ローディング表示 */
         #loading {
             padding: 10px;
             color: var(--accent-color);
@@ -138,34 +138,38 @@
 </main>
 
 <script>
-    // --- 1. 設定・データ管理 ---
-    // ※管理者：ここにあなたのGitHub Raw URLを貼り付けてください
+    // --- 1. 定数・設定 ---
     const DATA_URL = 'https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/elements.json';
-    
     const GRID_SIZE = 40; 
     const MAP_BLOCKS = 100;
     const MAP_WIDTH = GRID_SIZE * MAP_BLOCKS;
     const MAP_HEIGHT = GRID_SIZE * MAP_BLOCKS;
+    
+    // ズーム制限
+    const MIN_SCALE = 0.3; // 30%
+    const MAX_SCALE = 1.5; // 150%
 
     let buildingMaster = [];
 
-    // --- 2. GitHubからのデータ取得 ---
+    // --- 2. データ読み込み (GitHub連携) ---
     async function loadExternalData() {
         try {
             const response = await fetch(DATA_URL);
-            if (!response.ok) throw new Error('取得失敗');
+            if (!response.ok) throw new Error('Network error');
             const data = await response.json();
             buildingMaster = data.buildings;
             renderSidebar();
         } catch (error) {
-            console.error('Error:', error);
-            // テスト用のダミーデータ（GitHubが設定されるまで表示）
+            console.error('Data load failed:', error);
+            // デモ用フォールバックデータ
             buildingMaster = [
                 { id: 'asmb_1', name: '加工機 T1', size: [3, 3], power: -50, color: '#4a9eff' },
-                { id: 'pole_1', name: '送電パイル', size: [1, 1], power: 0, color: '#ffeb3b' }
+                { id: 'pole_1', name: '送電パイル', size: [1, 1], power: 0, color: '#ffeb3b' },
+                { id: 'solar_1', name: 'ソーラーパネル', size: [4, 4], power: 100, color: '#4caf50' }
             ];
             renderSidebar();
-            document.getElementById('loading').innerHTML = '<small style="color:red">GitHubデータ未設定: デモモード</small>';
+            const ld = document.getElementById('loading');
+            if(ld) ld.innerHTML = '<small style="color:#888">GitHubデータ未設定: プレビューモード</small>';
         }
     }
 
@@ -182,12 +186,12 @@
                 <strong>${item.name}</strong>
                 <small>サイズ: ${item.size[0]}x${item.size[1]} | 電力: ${item.power}</small>
             `;
-            div.onclick = () => alert(item.name + 'を選択しました（配置機能は次のステップ）');
+            div.onclick = () => console.log('Selected:', item.id);
             itemList.appendChild(div);
         });
     }
 
-    // --- 3. Konva ステージ・グリッド初期化 ---
+    // --- 3. 描画エンジン (Konva) 初期化 ---
     const stage = new Konva.Stage({
         container: 'container',
         width: window.innerWidth,
@@ -199,7 +203,7 @@
     stage.add(layer);
 
     function drawGrid() {
-        // 背景
+        // マップ背景
         const bg = new Konva.Rect({
             x: 0, y: 0,
             width: MAP_WIDTH, height: MAP_HEIGHT,
@@ -207,58 +211,104 @@
         });
         layer.add(bg);
 
-        // 線を描画（パフォーマンスのため1本のGroupにまとめることも可能ですが、まずは基本で）
+        // すべて同じ太さのグリッド線
+        const lineColor = '#2a2a2a';
         for (let i = 0; i <= MAP_BLOCKS; i++) {
-            // 10マスごとに線を太くして見やすく
-            const isMajor = i % 10 === 0;
+            // 垂直
             layer.add(new Konva.Line({
                 points: [i * GRID_SIZE, 0, i * GRID_SIZE, MAP_HEIGHT],
-                stroke: isMajor ? '#444' : '#2a2a2a',
-                strokeWidth: isMajor ? 2 : 1,
+                stroke: lineColor,
+                strokeWidth: 1,
                 listening: false
             }));
+            // 水平
             layer.add(new Konva.Line({
                 points: [0, i * GRID_SIZE, MAP_WIDTH, i * GRID_SIZE],
-                stroke: isMajor ? '#444' : '#2a2a2a',
-                strokeWidth: isMajor ? 2 : 1,
+                stroke: lineColor,
+                strokeWidth: 1,
                 listening: false
             }));
         }
     }
 
-    // --- 4. 操作・レスポンシブ処理 ---
-    function toggleSidebar() {
-        const sb = document.getElementById('sidebar');
-        sb.classList.toggle('closed');
-        // サイドバー開閉後に描画範囲を更新
-        setTimeout(() => {
-            const container = document.getElementById('stage-parent');
-            stage.width(container.offsetWidth);
-            stage.height(container.offsetHeight);
-        }, 350);
-    }
-
-    // PCズーム
-    stage.on('wheel', (e) => {
+    // --- 4. ズーム & 操作ロジック ---
+    function handleWheel(e) {
         e.evt.preventDefault();
         const oldScale = stage.scaleX();
         const pointer = stage.getPointerPosition();
-        const mousePointTo = { x: (pointer.x - stage.x()) / oldScale, y: (pointer.y - stage.y()) / oldScale };
-        const newScale = e.evt.deltaY > 0 ? oldScale / 1.1 : oldScale * 1.1;
-        stage.scale({ x: newScale, y: newScale });
-        stage.position({ x: pointer.x - mousePointTo.x * newScale, y: pointer.y - mousePointTo.y * newScale });
-    });
 
-    // 初期実行
-    window.addEventListener('resize', () => {
+        const mousePointTo = {
+            x: (pointer.x - stage.x()) / oldScale,
+            y: (pointer.y - stage.y()) / oldScale,
+        };
+
+        let newScale = e.evt.deltaY > 0 ? oldScale / 1.1 : oldScale * 1.1;
+
+        // 倍率制限適用
+        if (newScale < MIN_SCALE) newScale = MIN_SCALE;
+        if (newScale > MAX_SCALE) newScale = MAX_SCALE;
+
+        stage.scale({ x: newScale, y: newScale });
+
+        const newPos = {
+            x: pointer.x - mousePointTo.x * newScale,
+            y: pointer.y - mousePointTo.y * newScale,
+        };
+        stage.position(newPos);
+        layer.batchDraw();
+    }
+
+    stage.on('wheel', handleWheel);
+
+    // スマホ用ピンチズーム対応 (簡易)
+    let lastCenter = null;
+    let lastDist = 0;
+    stage.on('touchmove', function (e) {
+        if (e.evt.touches.length === 2) {
+            const touch1 = e.evt.touches[0];
+            const touch2 = e.evt.touches[1];
+            const dist = Math.sqrt(Math.pow(touch2.clientX - touch1.clientX, 2) + Math.pow(touch2.clientY - touch1.clientY, 2));
+
+            if (!lastDist) {
+                lastDist = dist;
+                return;
+            }
+
+            const oldScale = stage.scaleX();
+            let newScale = oldScale * (dist / lastDist);
+
+            if (newScale < MIN_SCALE) newScale = MIN_SCALE;
+            if (newScale > MAX_SCALE) newScale = MAX_SCALE;
+
+            stage.scale({ x: newScale, y: newScale });
+            lastDist = dist;
+            layer.batchDraw();
+        }
+    });
+    stage.on('touchend', () => { lastDist = 0; });
+
+    // --- 5. UI制御 ---
+    function toggleSidebar() {
+        const sb = document.getElementById('sidebar');
+        sb.classList.toggle('closed');
+        setTimeout(handleResize, 350);
+    }
+
+    function handleResize() {
         const container = document.getElementById('stage-parent');
         stage.width(container.offsetWidth);
         stage.height(container.offsetHeight);
-    });
+        layer.batchDraw();
+    }
 
+    window.addEventListener('resize', handleResize);
+
+    // 起動
     drawGrid();
     layer.draw();
     loadExternalData();
+    handleResize(); // 初期サイズ調整
+
 </script>
 </body>
 </html>
