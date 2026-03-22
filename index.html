@@ -257,10 +257,11 @@
     let lastScale = 0.30;
     let touchItem = null;
     let touchStartTime = 0;
-    let longPressTimer = null;
+    let moveStartTimer = null;
+    let deleteMenuTimer = null;
     let isMovingItem = false;
     let touchStartPos = { x: 0, y: 0 };
-    let deleteMenuTimer = null;
+    let hasMoved = false;
 
     function showModal(text, isConfirm, onOk) {
         const overlay = document.getElementById('modal-overlay');
@@ -621,7 +622,7 @@
 
     mainArea.addEventListener('touchstart', (e) => {
         closeTouchMenu();
-        clearTimeout(longPressTimer);
+        clearTimeout(moveStartTimer);
         clearTimeout(deleteMenuTimer);
         
         if (e.touches.length === 2) {
@@ -638,20 +639,23 @@
             touchItem = placedItems.find(item => mouseGrid.x >= item.x && mouseGrid.x < item.x + item.w && mouseGrid.y >= item.y && mouseGrid.y < item.y + item.h);
             touchStartTime = Date.now();
             isMovingItem = false;
+            hasMoved = false;
             
             // 0.5秒後: 施設移動開始
-            longPressTimer = setTimeout(() => {
-                if (touchItem && !isMovingItem) {
+            moveStartTimer = setTimeout(() => {
+                if (touchItem && !hasMoved) {
                     isMovingItem = true;
                     draggingItem = touchItem;
                     dragStartPos = { x: touchItem.x, y: touchItem.y };
                     mainArea.classList.add('dragging-item');
+                    // 移動開始したら削除タイマーをキャンセル
+                    clearTimeout(deleteMenuTimer);
                 }
             }, 500);
             
-            // 1秒後: 削除メニュー表示
+            // 1秒後: 削除メニュー表示（移動していない場合のみ）
             deleteMenuTimer = setTimeout(() => {
-                if (touchItem && !isMovingItem) {
+                if (touchItem && !isMovingItem && !hasMoved) {
                     showTouchMenu(touchItem, touchStartPos.x, touchStartPos.y);
                 }
             }, 1000);
@@ -693,9 +697,10 @@
             
             // 一定距離以上の移動で長押し判定をキャンセル
             if (deltaX > 10 || deltaY > 10) {
-                clearTimeout(deleteMenuTimer);
                 if (!isMovingItem) {
-                    clearTimeout(longPressTimer);
+                    hasMoved = true;
+                    clearTimeout(moveStartTimer);
+                    clearTimeout(deleteMenuTimer);
                 }
             }
             
@@ -718,7 +723,7 @@
     }, { passive: false });
 
     mainArea.addEventListener('touchend', (e) => {
-        clearTimeout(longPressTimer);
+        clearTimeout(moveStartTimer);
         clearTimeout(deleteMenuTimer);
         touchStartDist = 0;
         
@@ -741,6 +746,7 @@
         isMovingItem = false;
         draggingItem = null;
         touchItem = null;
+        hasMoved = false;
         mainArea.classList.remove('dragging-map', 'dragging-item');
     }, { passive: true });
 
@@ -749,7 +755,6 @@
         const menu = document.getElementById('touch-menu');
         const menuName = document.getElementById('touch-menu-item-name');
         menuName.innerText = item.name;
-        menu.style.display = 'block';
         
         // メニュー位置の計算（画面外に出ないように調整）
         const menuWidth = 200;
@@ -772,6 +777,7 @@
         
         menu.style.left = left + 'px';
         menu.style.top = top + 'px';
+        menu.style.display = 'block';
     }
 
     function closeTouchMenu() {
