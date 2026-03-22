@@ -205,8 +205,10 @@
     let allBuildings = [];
     let currentCategory = 'all';
 
-// --- スマホ操作用追加変数 ---
+// スマホ用追加
     let initialPinchDistance = null;
+    let touchTimeout = null;
+    let isLongPress = false;
 
     function showModal(text, isConfirm, onOk) {
         const overlay = document.getElementById('modal-overlay');
@@ -491,44 +493,32 @@
         return placedItems.some(item => (item !== ignoreItem) && (x < item.x + item.w && x + w > item.x && y < item.y + item.h && y + h > item.y));
     }
 
-    // --- マウス操作用共通ロジック ---
+    // マウス
     mainArea.addEventListener('mousedown', (e) => {
         if (e.button === 1) { isDraggingMap = true; lastMousePos = { x: e.clientX, y: e.clientY }; mainArea.classList.add('dragging-map'); return; }
         if (e.button === 0) {
-            const target = placedItems.find(item => mouseGrid.x >= item.x && mouseGrid.x < item.x + item.w && mouseGrid.y >= item.y && mouseGrid.y < item.y + item.h);
-            if (currentTool && currentTool.id === 'eraser') {
-                if (target) { placedItems = placedItems.filter(i => i !== target); updateStats(); autoSave(); }
-            } else if (target) {
-                draggingItem = target; dragStartPos = { x: target.x, y: target.y }; mainArea.classList.add('dragging-item');
-            } else if (currentTool && currentTool.id !== 'eraser') {
-                const px = Math.min(mapW - currentTool.w, mouseGrid.x);
-                const py = Math.min(mapH - currentTool.h, mouseGrid.y);
-                if (!isAreaOccupied(px, py, currentTool.w, currentTool.h)) { 
-                    const newItem = JSON.parse(JSON.stringify(currentTool));
-                    newItem.x = px; newItem.y = py;
-                    placedItems.push(newItem); updateStats(); autoSave(); 
-                }
+            const target = placedItems.find(i => mouseGrid.x >= i.x && mouseGrid.x < i.x + i.w && mouseGrid.y >= i.y && mouseGrid.y < i.y + i.h);
+            if (currentTool?.id === 'eraser') { if (target) { placedItems = placedItems.filter(i => i !== target); updateStats(); autoSave(); } }
+            else if (target) { draggingItem = target; dragStartPos = { x: target.x, y: target.y }; mainArea.classList.add('dragging-item'); }
+            else if (currentTool) {
+                const px = Math.min(mapW - currentTool.w, mouseGrid.x), py = Math.min(mapH - currentTool.h, mouseGrid.y);
+                if (!isAreaOccupied(px, py, currentTool.w, currentTool.h)) { const newItem = JSON.parse(JSON.stringify(currentTool)); newItem.x = px; newItem.y = py; placedItems.push(newItem); updateStats(); autoSave(); }
             }
         }
-        if (e.button === 2) { 
-            placedItems = placedItems.filter(item => !(mouseGrid.x >= item.x && mouseGrid.x < item.x + item.w && mouseGrid.y >= item.y && mouseGrid.y < item.y + item.h)); 
-            updateStats(); autoSave(); 
-        }
+        if (e.button === 2) { placedItems = placedItems.filter(i => !(mouseGrid.x >= i.x && mouseGrid.x < i.x + i.w && mouseGrid.y >= i.y && mouseGrid.y < i.y + i.h)); updateStats(); autoSave(); }
     });
 
     window.addEventListener('mousemove', (e) => {
         const rect = mainArea.getBoundingClientRect();
         if (isDraggingMap) { offsetX += e.clientX - lastMousePos.x; offsetY += e.clientY - lastMousePos.y; lastMousePos = { x: e.clientX, y: e.clientY }; }
-        const worldX = (e.clientX - rect.left - offsetX) / scale; const worldY = (e.clientY - rect.top - offsetY) / scale;
-        mouseGrid.x = Math.max(0, Math.min(mapW, Math.floor(worldX / baseGridSize)));
-        mouseGrid.y = Math.max(0, Math.min(mapH, Math.floor(worldY / baseGridSize)));
+        const worldX = (e.clientX - rect.left - offsetX) / scale, worldY = (e.clientY - rect.top - offsetY) / scale;
+        mouseGrid.x = Math.max(0, Math.min(mapW, Math.floor(worldX / baseGridSize))); mouseGrid.y = Math.max(0, Math.min(mapH, Math.floor(worldY / baseGridSize)));
         updateStatus();
     });
 
     window.addEventListener('mouseup', () => {
         if (draggingItem) {
-            const px = Math.min(mapW - draggingItem.w, mouseGrid.x);
-            const py = Math.min(mapH - draggingItem.h, mouseGrid.y);
+            const px = Math.min(mapW - draggingItem.w, mouseGrid.x), py = Math.min(mapH - draggingItem.h, mouseGrid.y);
             if (!isAreaOccupied(px, py, draggingItem.w, draggingItem.h, draggingItem)) { draggingItem.x = px; draggingItem.y = py; }
             else { draggingItem.x = dragStartPos.x; draggingItem.y = dragStartPos.y; }
             draggingItem = null; updateStats(); autoSave();
@@ -536,42 +526,44 @@
         isDraggingMap = false; mainArea.classList.remove('dragging-map', 'dragging-item');
     });
 
-    // --- スマホ操作用イベント処理（追記箇所） ---
+    // スマホ操作
     mainArea.addEventListener('touchstart', (e) => {
         if (e.touches.length === 1) {
-            const touch = e.touches[0];
-            lastMousePos = { x: touch.clientX, y: touch.clientY };
-            // マウスダウンをシミュレート
-            const mouseEvent = new MouseEvent("mousedown", { clientX: touch.clientX, clientY: touch.clientY, button: 0 });
-            mainArea.dispatchEvent(mouseEvent);
-            // アイテムがない場合はマップ移動フラグを立てる
-            const target = placedItems.find(item => mouseGrid.x >= item.x && mouseGrid.x < item.x + item.w && mouseGrid.y >= item.y && mouseGrid.y < item.y + item.h);
-            if (!target && (!currentTool || currentTool.id === 'eraser')) isDraggingMap = true;
+            const t = e.touches[0]; lastMousePos = { x: t.clientX, y: t.clientY }; isLongPress = false;
+            const worldX = (t.clientX - mainArea.getBoundingClientRect().left - offsetX) / scale;
+            const worldY = (t.clientY - mainArea.getBoundingClientRect().top - offsetY) / scale;
+            const gx = Math.max(0, Math.min(mapW, Math.floor(worldX / baseGridSize)));
+            const gy = Math.max(0, Math.min(mapH, Math.floor(worldY / baseGridSize)));
+            touchTimeout = setTimeout(() => {
+                const target = placedItems.find(i => gx >= i.x && gx < i.x + i.w && gy >= i.y && gy < i.y + i.h);
+                if (target) { isLongPress = true; draggingItem = target; dragStartPos = { x: target.x, y: target.y }; mainArea.classList.add('dragging-item'); }
+            }, 500);
         } else if (e.touches.length === 2) {
-            initialPinchDistance = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY);
+            clearTimeout(touchTimeout); initialPinchDistance = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY);
         }
     }, { passive: false });
 
     window.addEventListener('touchmove', (e) => {
-        e.preventDefault(); // ブラウザ標準のスクロールを防止
+        e.preventDefault();
         if (e.touches.length === 1) {
-            const touch = e.touches[0];
-            const mouseEvent = new MouseEvent("mousemove", { clientX: touch.clientX, clientY: touch.clientY });
-            window.dispatchEvent(mouseEvent);
+            const t = e.touches[0];
+            if (!isLongPress && Math.hypot(t.clientX - lastMousePos.x, t.clientY - lastMousePos.y) > 10) clearTimeout(touchTimeout);
+            window.dispatchEvent(new MouseEvent("mousemove", { clientX: t.clientX, clientY: t.clientY }));
         } else if (e.touches.length === 2 && initialPinchDistance) {
-            const currentDistance = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY);
-            const delta = currentDistance > initialPinchDistance ? 0.05 : -0.05;
-            const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-            const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-            applyZoom(delta, midX, midY);
-            initialPinchDistance = currentDistance;
+            clearTimeout(touchTimeout);
+            const dist = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY);
+            applyZoom(dist > initialPinchDistance ? 0.05 : -0.05, (e.touches[0].clientX + e.touches[1].clientX)/2, (e.touches[0].clientY + e.touches[1].clientY)/2);
+            initialPinchDistance = dist;
         }
     }, { passive: false });
 
-    window.addEventListener('touchend', () => {
-        initialPinchDistance = null;
-        const mouseEvent = new MouseEvent("mouseup", {});
-        window.dispatchEvent(mouseEvent);
+    window.addEventListener('touchend', (e) => {
+        clearTimeout(touchTimeout);
+        if (!isLongPress && e.changedTouches.length === 1) {
+            const t = e.changedTouches[0];
+            mainArea.dispatchEvent(new MouseEvent("mousedown", { clientX: t.clientX, clientY: t.clientY, button: 0 }));
+        }
+        initialPinchDistance = null; isLongPress = false; window.dispatchEvent(new MouseEvent("mouseup", {}));
     });
 
     // --- ズーム処理共通化 ---
