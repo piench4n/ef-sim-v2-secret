@@ -112,15 +112,21 @@
         /* 長押しメニュー */
         #touch-menu {
             position: fixed; display: none; background: var(--panel); border: 2px solid var(--accent);
-            border-radius: 8px; padding: 10px; z-index: 999; min-width: 150px;
-            box-shadow: 0 0 15px rgba(255, 207, 0, 0.3);
+            border-radius: 8px; padding: 15px; z-index: 1001; min-width: 180px;
+            box-shadow: 0 4px 20px rgba(255, 207, 0, 0.4); pointer-events: auto;
+        }
+        #touch-menu-item-name {
+            display: block; margin-bottom: 15px; font-weight: bold; color: var(--accent);
+            font-size: 0.95em; word-break: break-word;
         }
         #touch-menu button {
-            display: block; width: 100%; padding: 10px; margin: 5px 0;
+            display: block; width: 100%; padding: 12px; margin: 8px 0 0 0;
             background: var(--btn-idle); border: 1px solid var(--btn-border);
             color: var(--text); border-radius: 4px; cursor: pointer; font-weight: bold;
+            font-size: 0.9em; transition: 0.2s;
         }
         #touch-menu button:hover { background: var(--accent); color: #000; }
+        #touch-menu button:active { transform: scale(0.98); }
 
         /* スマホ対応レイアウト */
         @media (max-width: 768px) {
@@ -199,7 +205,7 @@
         <strong>【PC操作】</strong><br>
         画面移動: ホイール押し込み | 設置/移動: 左クリック/ドラッグ | 削除: 右クリック | 単体回転: R キー | 全体回転: Ctrl+R | ズーム: ホイール<br>
         <strong>【スマホ操作】</strong><br>
-        画面移動: 1本指ドラッグ | 施設移動: 長押し(0.5秒) | 削除: 長押し(1.2秒) | ズーム: 2本指ピンチ
+        画面移動: 1本指ドラッグ | 施設移動: 長押し(0.5秒) | 削除: 長押し(1秒) | ズーム: 2本指ピンチ
     </div>
 </div>
 
@@ -209,7 +215,7 @@
 </div>
 
 <div id="touch-menu">
-    <strong id="touch-menu-item-name" style="display: block; margin-bottom: 10px;"></strong>
+    <strong id="touch-menu-item-name"></strong>
     <button onclick="deleteTouchItem()">削除</button>
 </div>
 
@@ -254,6 +260,7 @@
     let longPressTimer = null;
     let isMovingItem = false;
     let touchStartPos = { x: 0, y: 0 };
+    let deleteMenuTimer = null;
 
     function showModal(text, isConfirm, onOk) {
         const overlay = document.getElementById('modal-overlay');
@@ -614,6 +621,8 @@
 
     mainArea.addEventListener('touchstart', (e) => {
         closeTouchMenu();
+        clearTimeout(longPressTimer);
+        clearTimeout(deleteMenuTimer);
         
         if (e.touches.length === 2) {
             // ピンチズーム開始
@@ -632,13 +641,20 @@
             
             // 0.5秒後: 施設移動開始
             longPressTimer = setTimeout(() => {
-                if (touchItem) {
+                if (touchItem && !isMovingItem) {
                     isMovingItem = true;
                     draggingItem = touchItem;
                     dragStartPos = { x: touchItem.x, y: touchItem.y };
                     mainArea.classList.add('dragging-item');
                 }
             }, 500);
+            
+            // 1秒後: 削除メニュー表示
+            deleteMenuTimer = setTimeout(() => {
+                if (touchItem && !isMovingItem) {
+                    showTouchMenu(touchItem, touchStartPos.x, touchStartPos.y);
+                }
+            }, 1000);
             
             if (!touchItem && (!currentTool || currentTool.id === 'eraser' || currentTool.id === null)) {
                 // 施設がない場合はマップドラッグ
@@ -672,6 +688,17 @@
         } else if (e.touches.length === 1) {
             // 1本指ドラッグ
             const touch = e.touches[0];
+            const deltaX = Math.abs(touch.clientX - touchStartPos.x);
+            const deltaY = Math.abs(touch.clientY - touchStartPos.y);
+            
+            // 一定距離以上の移動で長押し判定をキャンセル
+            if (deltaX > 10 || deltaY > 10) {
+                clearTimeout(deleteMenuTimer);
+                if (!isMovingItem) {
+                    clearTimeout(longPressTimer);
+                }
+            }
+            
             updateTouchGridPos(touch);
             
             if (isDraggingMap) {
@@ -692,13 +719,8 @@
 
     mainArea.addEventListener('touchend', (e) => {
         clearTimeout(longPressTimer);
+        clearTimeout(deleteMenuTimer);
         touchStartDist = 0;
-        
-        // 1.2秒長押しチェック（削除メニュー表示）
-        const pressDuration = Date.now() - touchStartTime;
-        if (touchItem && pressDuration >= 1200 && !isMovingItem) {
-            showTouchMenu(touchItem, touchStartPos.x, touchStartPos.y);
-        }
         
         if (draggingItem && isMovingItem) {
             // 施設移動終了
@@ -728,8 +750,28 @@
         const menuName = document.getElementById('touch-menu-item-name');
         menuName.innerText = item.name;
         menu.style.display = 'block';
-        menu.style.left = Math.min(x, window.innerWidth - 160) + 'px';
-        menu.style.top = Math.min(y, window.innerHeight - 100) + 'px';
+        
+        // メニュー位置の計算（画面外に出ないように調整）
+        const menuWidth = 200;
+        const menuHeight = 120;
+        let left = x;
+        let top = y;
+        
+        if (left + menuWidth > window.innerWidth) {
+            left = window.innerWidth - menuWidth - 10;
+        }
+        if (top + menuHeight > window.innerHeight) {
+            top = window.innerHeight - menuHeight - 10;
+        }
+        if (left < 10) {
+            left = 10;
+        }
+        if (top < 10) {
+            top = 10;
+        }
+        
+        menu.style.left = left + 'px';
+        menu.style.top = top + 'px';
     }
 
     function closeTouchMenu() {
@@ -747,6 +789,13 @@
     }
 
     document.addEventListener('click', (e) => {
+        const menu = document.getElementById('touch-menu');
+        if (menu.style.display === 'block' && !menu.contains(e.target)) {
+            closeTouchMenu();
+        }
+    });
+
+    document.addEventListener('touchstart', (e) => {
         const menu = document.getElementById('touch-menu');
         if (menu.style.display === 'block' && !menu.contains(e.target)) {
             closeTouchMenu();
