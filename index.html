@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
     <meta name="robots" content="noindex,nofollow">
     <title>Endfield Industrial Planner</title>
     <style>
@@ -15,7 +15,13 @@
             --tooltip-bg: rgba(0, 0, 0, 0.9);
         }
 
-        body { margin: 0; background: var(--bg); color: var(--text); font-family: sans-serif; display: flex; height: 100vh; overflow: hidden; }
+        body { 
+            margin: 0; background: var(--bg); color: var(--text); font-family: sans-serif; display: flex; height: 100vh; overflow: hidden;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
         
         #sidebar { 
             width: var(--sidebar-w); min-width: var(--sidebar-w); background: var(--panel); border-right: 2px solid rgba(128,128,128,0.2); padding: 20px; 
@@ -77,7 +83,7 @@
 
         select { width: 100%; padding: 8px; background: var(--bg); color: var(--text); border: 1px solid var(--btn-border); border-radius: 4px; outline: none; cursor: pointer; font-size: 0.9em; }
 
-        #main { flex: 1; position: relative; overflow: hidden; background: var(--bg); cursor: crosshair; touch-action: none; }
+        #main { flex: 1; position: relative; overflow: hidden; background: var(--bg); cursor: crosshair; touch-action: none; -webkit-user-select: none; -webkit-touch-callout: none; user-select: none; }
         #main.dragging-map { cursor: grabbing; }
         #main.dragging-item { cursor: move; }
         canvas { display: block; }
@@ -199,13 +205,13 @@
         <strong>【PC操作】</strong><br>
         画面移動: ホイール押し込み | 設置/移動: 左クリック/ドラッグ | 削除: 右クリック | 単体回転: R キー | 全体回転: Ctrl+R | ズーム: ホイール<br>
         <strong>【スマホ操作】</strong><br>
-        画面移動: 1本指ドラッグ | 設置/移動: タップ後ドラッグ(2秒) | 削除: 長押し(4秒) | ズーム: 2本指ピンチ
+        画面移動: 1本指ドラッグ | 設置/移動: タップ後ドラッグ(0.5秒) | 削除: 長押し(1.2秒) | ズーム: 2本指ピンチ
     </div>
 </div>
 
 <div id="main">
     <canvas id="gridCanvas"></canvas>
-    <div class="status-bar" id="status">座標: 0, 0 | ズーム: 25%</div>
+    <div class="status-bar" id="status">座標: 0, 0 | ズーム: 30%</div>
 </div>
 
 <div id="touch-menu">
@@ -234,7 +240,7 @@
     
     let mapW = 40;
     let mapH = 40;
-    let scale = 0.25; 
+    let scale = 0.30; 
     let offsetX = 0;
     let offsetY = 0;
     let isDraggingMap = false;
@@ -249,7 +255,7 @@
 
     // タッチ関連変数
     let touchStartDist = 0;
-    let lastScale = 0.25;
+    let lastScale = 0.30;
     let touchItem = null;
     let touchStartTime = 0;
     let longPressTimer = null;
@@ -424,18 +430,15 @@
         }
     });
 
-    // --- ラベルのリサイズ機能と強調版方位▲の描画 ---
     function drawLabel(context, text, x, y, itemW, itemH, angle = 0) {
         const pxW = itemW * baseGridSize;
         const pxH = itemH * baseGridSize;
         const padding = 2;
         
-        // 1. 方位マーカー（▲）の描画 - 強調版
         context.save();
         context.translate(x, y);
         context.rotate(angle * Math.PI / 2);
         
-        // アウトライン（黒縁）
         context.strokeStyle = "rgba(0, 0, 0, 0.8)";
         context.lineWidth = 2;
         context.lineJoin = "round";
@@ -451,12 +454,11 @@
         };
 
         drawTri();
-        context.stroke(); // 縁取り
-        context.fillStyle = "#ffcf00"; // 鮮やかな黄色
-        context.fill(); // 中身
+        context.stroke();
+        context.fillStyle = "#ffcf00";
+        context.fill();
         context.restore();
 
-        // 2. テキスト処理
         let fontSize = (itemW === 1 || itemH === 1) ? 11 : 13;
         context.font = `bold ${fontSize}px sans-serif`;
         context.textAlign = "center";
@@ -588,7 +590,7 @@
     mainArea.addEventListener('wheel', (e) => {
         e.preventDefault();
         const delta = e.deltaY > 0 ? -0.05 : 0.05;
-        const newScale = Math.min(Math.max(0.1, scale + delta), 1.5);
+        const newScale = Math.min(Math.max(0.30, scale + delta), 1.5);
         if (newScale !== scale) {
             const rect = mainArea.getBoundingClientRect();
             const mx = e.clientX - rect.left; const my = e.clientY - rect.top;
@@ -631,7 +633,7 @@
             touchStartTime = Date.now();
             isMovingItem = false;
             
-            // 2秒後: 施設移動開始
+            // 0.5秒後: 施設移動開始
             longPressTimer = setTimeout(() => {
                 if (touchItem) {
                     isMovingItem = true;
@@ -639,7 +641,7 @@
                     dragStartPos = { x: touchItem.x, y: touchItem.y };
                     mainArea.classList.add('dragging-item');
                 }
-            }, 2000);
+            }, 500);
             
             if (!touchItem && (!currentTool || currentTool.id === 'eraser' || currentTool.id === null)) {
                 // 施設がない場合はマップドラッグ
@@ -653,10 +655,9 @@
     mainArea.addEventListener('touchmove', (e) => {
         if (e.touches.length === 2 && touchStartDist > 0) {
             // ピンチズーム
-            e.preventDefault();
             const currentDist = getTouchDistance(e.touches[0], e.touches[1]);
             const zoomRatio = currentDist / touchStartDist;
-            const newScale = Math.min(Math.max(0.1, lastScale * zoomRatio), 1.5);
+            const newScale = Math.min(Math.max(0.30, lastScale * zoomRatio), 1.5);
             
             if (newScale !== scale) {
                 const rect = mainArea.getBoundingClientRect();
@@ -689,15 +690,15 @@
             
             updateStatus();
         }
-    }, { passive: false });
+    }, { passive: true });
 
     mainArea.addEventListener('touchend', (e) => {
         clearTimeout(longPressTimer);
         touchStartDist = 0;
         
-        // 4秒長押しチェック（削除メニュー表示）
+        // 1.2秒長押しチェック（削除メニュー表示）
         const pressDuration = Date.now() - touchStartTime;
-        if (touchItem && pressDuration >= 4000 && !isMovingItem) {
+        if (touchItem && pressDuration >= 1200 && !isMovingItem) {
             showTouchMenu(touchItem, touchStartPos.x, touchStartPos.y);
         }
         
@@ -723,7 +724,6 @@
         mainArea.classList.remove('dragging-map', 'dragging-item');
     }, { passive: true });
 
-    // 長押しメニュー関連関数
     function showTouchMenu(item, x, y) {
         const menu = document.getElementById('touch-menu');
         const menuName = document.getElementById('touch-menu-item-name');
