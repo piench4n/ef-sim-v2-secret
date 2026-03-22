@@ -304,6 +304,7 @@
     let isDraggingMap = false;
     let draggingItem = null;
     let dragStartPos = { x: 0, y: 0 };
+    let dragOffset = { x: 0, y: 0 }; // 指/マウスとアイテム左上の差分
     let lastMousePos = { x: 0, y: 0 };
     let placedItems = [];
     let currentTool = null;
@@ -610,11 +611,13 @@
 
         if(activePreview && !selectedGroup.includes(activePreview)) {
             ctx.globalAlpha = 0.5;
-            const occupied = isAreaOccupied(px, py, activePreview.w, activePreview.h, draggingItem);
+            const previewX = (draggingItem) ? draggingItem.x : px;
+            const previewY = (draggingItem) ? draggingItem.y : py;
+            const occupied = isAreaOccupied(previewX, previewY, activePreview.w, activePreview.h, draggingItem);
             ctx.fillStyle = occupied ? 'red' : activePreview.color;
-            ctx.fillRect(px*baseGridSize, py*baseGridSize, activePreview.w*baseGridSize, activePreview.h*baseGridSize);
+            ctx.fillRect(previewX*baseGridSize, previewY*baseGridSize, activePreview.w*baseGridSize, activePreview.h*baseGridSize);
             ctx.globalAlpha = 1.0;
-            drawLabel(ctx, activePreview.name, (px + activePreview.w/2)*baseGridSize, (py + activePreview.h/2)*baseGridSize, activePreview.w, activePreview.h, activePreview.angle || 0);
+            drawLabel(ctx, activePreview.name, (previewX + activePreview.w/2)*baseGridSize, (previewY + activePreview.h/2)*baseGridSize, activePreview.w, activePreview.h, activePreview.angle || 0);
         }
 
         requestAnimationFrame(draw);
@@ -629,6 +632,7 @@
         return placedItems.some(item => (item !== ignoreItem) && (x < item.x + item.w && x + w > item.x && y < item.y + item.h && y + h > item.y));
     }
 
+    // --- MOUSE LISTENERS ---
     mainArea.addEventListener('mousedown', (e) => {
         if (e.button === 1) { isDraggingMap = true; lastMousePos = { x: e.clientX, y: e.clientY }; mainArea.classList.add('dragging-map'); return; }
         if (e.button === 0) {
@@ -636,8 +640,11 @@
             if (currentTool && currentTool.id === 'eraser') {
                 if (target) { placedItems = placedItems.filter(i => i !== target); updateStats(); autoSave(); }
             } else if (target) {
-                draggingItem = target; dragStartPos = { x: target.x, y: target.y }; mainArea.classList.add('dragging-item');
-                target._origPos = { x: target.x, y: target.y };
+                draggingItem = target; 
+                dragStartPos = { x: target.x, y: target.y }; 
+                // マウス位置とアイテム左上のオフセットを保存
+                dragOffset = { x: mouseGrid.x - target.x, y: mouseGrid.y - target.y };
+                mainArea.classList.add('dragging-item');
             } else if (currentTool && currentTool.id !== 'eraser') {
                 const px = Math.min(mapW - currentTool.w, mouseGrid.x);
                 const py = Math.min(mapH - currentTool.h, mouseGrid.y);
@@ -657,22 +664,29 @@
     window.addEventListener('mousemove', (e) => {
         const rect = mainArea.getBoundingClientRect();
         if (isDraggingMap) { offsetX += e.clientX - lastMousePos.x; offsetY += e.clientY - lastMousePos.y; lastMousePos = { x: e.clientX, y: e.clientY }; }
-        const worldX = (e.clientX - rect.left - offsetX) / scale; const worldY = (e.clientY - rect.top - offsetY) / scale;
+        
+        const worldX = (e.clientX - rect.left - offsetX) / scale; 
+        const worldY = (e.clientY - rect.top - offsetY) / scale;
         mouseGrid.x = Math.max(0, Math.min(mapW, Math.floor(worldX / baseGridSize)));
         mouseGrid.y = Math.max(0, Math.min(mapH, Math.floor(worldY / baseGridSize)));
+        
         if (draggingItem) {
-            draggingItem.x = Math.min(mapW - draggingItem.w, mouseGrid.x);
-            draggingItem.y = Math.min(mapH - draggingItem.h, mouseGrid.y);
+            // オフセットを考慮して位置を更新
+            let nextX = mouseGrid.x - dragOffset.x;
+            let nextY = mouseGrid.y - dragOffset.y;
+            draggingItem.x = Math.max(0, Math.min(mapW - draggingItem.w, nextX));
+            draggingItem.y = Math.max(0, Math.min(mapH - draggingItem.h, nextY));
         }
         updateStatus();
     });
 
     window.addEventListener('mouseup', () => {
         if (draggingItem) {
-            const px = Math.min(mapW - draggingItem.w, mouseGrid.x);
-            const py = Math.min(mapH - draggingItem.h, mouseGrid.y);
-            if (!isAreaOccupied(px, py, draggingItem.w, draggingItem.h, draggingItem)) { draggingItem.x = px; draggingItem.y = py; }
-            else { draggingItem.x = dragStartPos.x; draggingItem.y = dragStartPos.y; }
+            const px = draggingItem.x;
+            const py = draggingItem.y;
+            if (isAreaOccupied(px, py, draggingItem.w, draggingItem.h, draggingItem)) { 
+                draggingItem.x = dragStartPos.x; draggingItem.y = dragStartPos.y; 
+            }
             draggingItem = null; updateStats(); autoSave();
         }
         isDraggingMap = false; mainArea.classList.remove('dragging-map', 'dragging-item');
@@ -686,6 +700,7 @@
         mouseGrid.y = Math.max(0, Math.min(mapH, Math.floor(worldY / baseGridSize)));
     }
 
+    // --- TOUCH LISTENERS ---
     mainArea.addEventListener('touchstart', (e) => {
         closeTouchMenu();
         clearTimeout(longPressTimer);
@@ -701,9 +716,13 @@
             touchItem = placedItems.find(item => mouseGrid.x >= item.x && mouseGrid.x < item.x + item.w && mouseGrid.y >= item.y && mouseGrid.y < item.y + item.h);
             
             if (touchItem) {
+                // タッチした瞬間のオフセットを事前に計算
+                const tempOffset = { x: mouseGrid.x - touchItem.x, y: mouseGrid.y - touchItem.y };
+                
                 longPressTimer = setTimeout(() => {
                     isMovingItem = true;
                     draggingItem = touchItem;
+                    dragOffset = tempOffset; // 保存しておいたオフセットを適用
                     mainArea.classList.add('dragging-item');
                     dragStartPos = { x: touchItem.x, y: touchItem.y };
                 }, 500);
@@ -746,8 +765,10 @@
             if (isDraggingMap) {
                 offsetX += touch.clientX - lastMousePos.x; offsetY += touch.clientY - lastMousePos.y; lastMousePos = { x: touch.clientX, y: touch.clientY };
             } else if (isMovingItem && draggingItem) {
-                draggingItem.x = Math.min(mapW - draggingItem.w, mouseGrid.x);
-                draggingItem.y = Math.min(mapH - draggingItem.h, mouseGrid.y);
+                let nextX = mouseGrid.x - dragOffset.x;
+                let nextY = mouseGrid.y - dragOffset.y;
+                draggingItem.x = Math.max(0, Math.min(mapW - draggingItem.w, nextX));
+                draggingItem.y = Math.max(0, Math.min(mapH - draggingItem.h, nextY));
             }
             updateStatus();
         }
@@ -756,9 +777,10 @@
     mainArea.addEventListener('touchend', (e) => {
         clearTimeout(longPressTimer); clearTimeout(menuDisplayTimer);
         if (draggingItem && isMovingItem) {
-            const px = Math.min(mapW - draggingItem.w, mouseGrid.x); const py = Math.min(mapH - draggingItem.h, mouseGrid.y);
-            if (!isAreaOccupied(px, py, draggingItem.w, draggingItem.h, draggingItem)) { draggingItem.x = px; draggingItem.y = py; }
-            else { draggingItem.x = dragStartPos.x; draggingItem.y = dragStartPos.y; }
+            const px = draggingItem.x; const py = draggingItem.y;
+            if (isAreaOccupied(px, py, draggingItem.w, draggingItem.h, draggingItem)) { 
+                draggingItem.x = dragStartPos.x; draggingItem.y = dragStartPos.y; 
+            }
             updateStats(); autoSave();
         }
         isDraggingMap = false; isMovingItem = false; draggingItem = null; mainArea.classList.remove('dragging-map', 'dragging-item');
