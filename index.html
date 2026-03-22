@@ -44,6 +44,7 @@
 
         .tool-group { border: 1px solid var(--btn-border); padding: 10px; border-radius: 4px; margin-bottom: 5px; text-align: left; }
         .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 4px 0; }
+        .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin: 4px 0; }
 
         label { font-size: 0.8em; color: var(--accent); font-weight: bold; display: block; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.05em; }
         h2 { margin-top: 0; font-size: 1.1em; border-bottom: 2px solid var(--accent); padding-bottom: 5px; white-space: nowrap; color: var(--accent); }
@@ -252,10 +253,14 @@
         <label>設計図コード</label>
         <div class="grid-2">
             <button class="tool-btn action-btn" onclick="exportData()">書き出し</button>
-            <button class="tool-btn action-btn" onclick="confirmImport()">読み込み</button>
-            <textarea id="data-text" placeholder="ここにコードを入力" style="grid-column: span 2;"></textarea>
-            <button class="tool-btn action-btn save-btn" onclick="downloadImage()">画像を保存 (PNG)</button>
+            <button class="tool-btn action-btn" onclick="pasteData()">貼り付け</button>
         </div>
+        <div class="grid-2">
+            <button class="tool-btn action-btn" onclick="confirmImport()">読み込み</button>
+            <button class="tool-btn action-btn" onclick="clearCodeText()" style="color:var(--danger)">すべて削除</button>
+        </div>
+        <textarea id="data-text" placeholder="ここにコードを入力" style="width: 100%;"></textarea>
+        <button class="tool-btn action-btn save-btn" onclick="downloadImage()">画像を保存 (PNG)</button>
         <div class="warning-text">※履歴削除等でデータが消えるため、コードの書き出し保存を推奨します。</div>
     </div>
     
@@ -843,7 +848,7 @@
         expCtx.strokeStyle = getComputedStyle(document.body).getPropertyValue('--grid').trim();
         expCtx.lineWidth = 1;
         for(let i=0; i<=mapW; i++) { expCtx.beginPath(); expCtx.moveTo(i*baseGridSize, 0); expCtx.lineTo(i*baseGridSize, expCanvas.height); expCtx.stroke(); }
-        for(let j=0; j<=mapH; j++) { expCtx.beginPath(); expCtx.moveTo(0, j*baseGridSize); ctx.lineTo(expCanvas.width, j*baseGridSize); expCtx.stroke(); }
+        for(let j=0; j<=mapH; j++) { expCtx.beginPath(); expCtx.moveTo(0, j*baseGridSize); expCtx.lineTo(expCanvas.width, j*baseGridSize); expCtx.stroke(); }
         placedItems.forEach(item => { 
             expCtx.fillStyle = item.color; expCtx.globalAlpha = 0.9; 
             expCtx.fillRect(item.x*baseGridSize+1, item.y*baseGridSize+1, item.w*baseGridSize-2, item.h*baseGridSize-2); 
@@ -860,6 +865,25 @@
         }).catch(() => {
             showModal('コードを書き出しました。コピーして保存してください。', false);
         });
+    }
+
+    async function pasteData() {
+        try {
+            const text = await navigator.clipboard.readText();
+            const dataArea = document.getElementById('data-text');
+            if(dataArea) {
+                dataArea.value = text;
+            }
+        } catch (err) {
+            showModal('クリップボードへのアクセスが拒否されました。', false);
+        }
+    }
+
+    function clearCodeText() {
+        const dataArea = document.getElementById('data-text');
+        if(dataArea) {
+            dataArea.value = '';
+        }
     }
 
     async function loadConfig() {
