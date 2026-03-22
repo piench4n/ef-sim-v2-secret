@@ -1,0 +1,11 @@
+{
+  "buildings": [
+    {
+      "id": "assembler_1",
+      "name": "加工機T1",
+      "size": [3, 3],
+      "power": -50,
+      "icon": "https://raw.githubusercontent.com/.../icon.png"
+    }
+  ]
+}
