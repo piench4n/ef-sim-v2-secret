@@ -182,7 +182,7 @@
             }
 
             #buildings-container {
-                max-height: 120px; /* 180pxから120pxに縮小 */
+                max-height: 120px;
                 overflow-y: auto;
                 display: block;
             }
@@ -213,6 +213,15 @@
     </div>
 
     <div class="tool-group">
+        <label>基本操作</label>
+        <div class="grid-2">
+            <button class="tool-btn action-btn active" onclick="setMoveMode()" id="btn-move">移動モード</button>
+            <button class="tool-btn action-btn" onclick="setEraser()" id="btn-eraser">削除モード</button>
+            <button class="tool-btn action-btn full-width" onclick="confirmClear()" style="color:var(--danger)">すべて削除</button>
+        </div>
+    </div>
+
+    <div class="tool-group">
         <label>マップ設定</label>
         <select id="map-ratio" onchange="changeMapRatio(this.value)">
             <option value="40:40">40 × 40</option>
@@ -220,15 +229,6 @@
             <option value="70:70">70 × 70</option>
             <option value="80:80">80 × 80</option>
         </select>
-    </div>
-
-    <div class="tool-group">
-        <label>基本操作</label>
-        <div class="grid-2">
-            <button class="tool-btn action-btn active" onclick="setMoveMode()" id="btn-move">移動モード</button>
-            <button class="tool-btn action-btn" onclick="setEraser()" id="btn-eraser">削除モード</button>
-            <button class="tool-btn action-btn full-width" onclick="confirmClear()" style="color:var(--danger)">すべて削除</button>
-        </div>
     </div>
 
     <div class="tool-group" id="save-area">
@@ -419,7 +419,7 @@
             });
             changeMapRatio("40:40"); renderButtons(); autoLoad(); updateStats();
             
-            // 初期の矢印設定
+            // 初期の矢印設定を復元
             const btn = document.getElementById('toggle-sidebar');
             if (window.innerWidth <= 768) {
                 btn.innerText = '▲';
