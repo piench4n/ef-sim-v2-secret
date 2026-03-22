@@ -457,6 +457,11 @@
     }
 
     function setTool(config) {
+        // 指示：もう一度タップで解除（移動モードへ）
+        if (currentTool && currentTool.id === config.id) {
+            setMoveMode();
+            return;
+        }
         currentTool = JSON.parse(JSON.stringify(config));
         currentTool.angle = 0; 
         renderButtons();
@@ -854,11 +859,9 @@
         const dataArea = document.getElementById('data-text');
         if(dataArea) { 
             dataArea.value = code;
-            // クリップボードへコピー
             navigator.clipboard.writeText(code).then(() => {
                 showModal('コードをコピーしました！', false);
             }).catch(() => {
-                // 万が一失敗した場合のフォールバック表示
                 showModal('コードを書き出しました。コピーして保存してください。', false);
             });
         }
