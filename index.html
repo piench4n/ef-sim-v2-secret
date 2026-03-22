@@ -10,7 +10,10 @@
         :root {
             --sidebar-width: 280px;
             --bg-color: #1a1c1e;
+            --sidebar-bg: #25282c;
             --accent-color: #ff9d00;
+            --text-color: #e0e0e0;
+            --border-color: #3f444a;
         }
 
         body {
@@ -19,8 +22,8 @@
             display: flex;
             height: 100vh;
             background-color: var(--bg-color);
-            color: white;
-            font-family: 'Segoe UI', sans-serif;
+            color: var(--text-color);
+            font-family: 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif;
             overflow: hidden;
         }
 
@@ -28,36 +31,68 @@
         #sidebar {
             width: var(--sidebar-width);
             height: 100%;
-            background: #25282c;
-            border-right: 1px solid #3f444a;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            background: var(--sidebar-bg);
+            border-right: 1px solid var(--border-color);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             display: flex;
             flex-direction: column;
             z-index: 100;
+            flex-shrink: 0;
         }
 
         #sidebar.closed {
-            margin-left: calc(var(--sidebar-width) * -1);
+            transform: translateX(calc(var(--sidebar-width) * -1));
+            position: absolute;
         }
 
         .sidebar-header {
             padding: 20px;
             font-weight: bold;
-            border-bottom: 1px solid #3f444a;
-            display: flex;
-            justify-content: space-between;
+            font-size: 1.1em;
+            border-bottom: 1px solid var(--border-color);
+            background: rgba(0,0,0,0.2);
+        }
+
+        #item-list {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 15px;
+        }
+
+        /* 設備アイテムカード */
+        .sidebar-item {
+            background: #3f444a;
+            padding: 12px;
+            margin-bottom: 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+        }
+
+        .sidebar-item:hover {
+            background: #4f555c;
+            border-color: var(--accent-color);
+        }
+
+        .sidebar-item strong {
+            display: block;
+            color: var(--accent-color);
+            margin-bottom: 4px;
+        }
+
+        .sidebar-item small {
+            color: #bbb;
+            font-size: 0.8em;
         }
 
         /* マップ表示エリア */
         #stage-parent {
             flex-grow: 1;
             position: relative;
-            cursor: grab;
             overflow: hidden;
-        }
-
-        #stage-parent:active {
-            cursor: grabbing;
+            background-image: radial-gradient(#2a2d31 1px, transparent 1px);
+            background-size: 40px 40px; /* 目安のドット背景 */
         }
 
         /* UIボタン */
@@ -69,29 +104,31 @@
             background: var(--accent-color);
             border: none;
             color: black;
-            padding: 10px 15px;
+            padding: 10px 18px;
             cursor: pointer;
             border-radius: 4px;
             font-weight: bold;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
         }
 
-        /* スマホ対応：サイドバーが開いている時にマップを隠さない工夫 */
+        /* ローディング表示 */
+        #loading {
+            padding: 10px;
+            color: var(--accent-color);
+            text-align: center;
+        }
+
         @media (max-width: 768px) {
-            :root { --sidebar-width: 200px; }
+            :root { --sidebar-width: 220px; }
         }
     </style>
 </head>
 <body>
 
 <nav id="sidebar">
-    <div class="sidebar-header">
-        <span>工業設備リスト</span>
-    </div>
-    <div style="padding: 15px;">
-        <p style="font-size: 0.8em; color: #888;">設備をドラッグして配置（開発中）</p>
-        <div style="background: #3f444a; padding: 10px; margin-bottom: 5px; border-radius: 4px; cursor: pointer;">
-            加工機 T1 (3x3)
-        </div>
+    <div class="sidebar-header">工業設備リスト</div>
+    <div id="item-list">
+        <div id="loading">GitHubからデータ取得中...</div>
     </div>
 </nav>
 
@@ -101,118 +138,127 @@
 </main>
 
 <script>
-    // 設定
-    const GRID_SIZE = 40; // 1マスのサイズ(px)
-    const MAP_BLOCKS = 100; // 100x100マス
+    // --- 1. 設定・データ管理 ---
+    // ※管理者：ここにあなたのGitHub Raw URLを貼り付けてください
+    const DATA_URL = 'https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/elements.json';
+    
+    const GRID_SIZE = 40; 
+    const MAP_BLOCKS = 100;
     const MAP_WIDTH = GRID_SIZE * MAP_BLOCKS;
     const MAP_HEIGHT = GRID_SIZE * MAP_BLOCKS;
 
-    // サイドバー開閉
-    function toggleSidebar() {
-        document.getElementById('sidebar').classList.toggle('closed');
-        setTimeout(handleResize, 310); // アニメーション終了後にリサイズ
+    let buildingMaster = [];
+
+    // --- 2. GitHubからのデータ取得 ---
+    async function loadExternalData() {
+        try {
+            const response = await fetch(DATA_URL);
+            if (!response.ok) throw new Error('取得失敗');
+            const data = await response.json();
+            buildingMaster = data.buildings;
+            renderSidebar();
+        } catch (error) {
+            console.error('Error:', error);
+            // テスト用のダミーデータ（GitHubが設定されるまで表示）
+            buildingMaster = [
+                { id: 'asmb_1', name: '加工機 T1', size: [3, 3], power: -50, color: '#4a9eff' },
+                { id: 'pole_1', name: '送電パイル', size: [1, 1], power: 0, color: '#ffeb3b' }
+            ];
+            renderSidebar();
+            document.getElementById('loading').innerHTML = '<small style="color:red">GitHubデータ未設定: デモモード</small>';
+        }
     }
 
-    // Konva ステージ初期化
+    function renderSidebar() {
+        const itemList = document.getElementById('item-list');
+        const loading = document.getElementById('loading');
+        if(loading) loading.remove();
+
+        buildingMaster.forEach(item => {
+            const div = document.createElement('div');
+            div.className = 'sidebar-item';
+            div.style.borderLeft = `4px solid ${item.color || '#ccc'}`;
+            div.innerHTML = `
+                <strong>${item.name}</strong>
+                <small>サイズ: ${item.size[0]}x${item.size[1]} | 電力: ${item.power}</small>
+            `;
+            div.onclick = () => alert(item.name + 'を選択しました（配置機能は次のステップ）');
+            itemList.appendChild(div);
+        });
+    }
+
+    // --- 3. Konva ステージ・グリッド初期化 ---
     const stage = new Konva.Stage({
         container: 'container',
         width: window.innerWidth,
         height: window.innerHeight,
-        draggable: true, // これでPCのドラッグ移動が可能に
+        draggable: true,
     });
 
     const layer = new Konva.Layer();
     stage.add(layer);
 
-    // グリッド（100x100）を描画する関数
     function drawGrid() {
-        // 背景の長方形
+        // 背景
         const bg = new Konva.Rect({
-            x: 0,
-            y: 0,
-            width: MAP_WIDTH,
-            height: MAP_HEIGHT,
+            x: 0, y: 0,
+            width: MAP_WIDTH, height: MAP_HEIGHT,
             fill: '#1a1c1e',
         });
         layer.add(bg);
 
-        // 垂直線
+        // 線を描画（パフォーマンスのため1本のGroupにまとめることも可能ですが、まずは基本で）
         for (let i = 0; i <= MAP_BLOCKS; i++) {
+            // 10マスごとに線を太くして見やすく
+            const isMajor = i % 10 === 0;
             layer.add(new Konva.Line({
                 points: [i * GRID_SIZE, 0, i * GRID_SIZE, MAP_HEIGHT],
-                stroke: '#333',
-                strokeWidth: 1,
-                listening: false // 線へのイベントを無効化して軽量化
+                stroke: isMajor ? '#444' : '#2a2a2a',
+                strokeWidth: isMajor ? 2 : 1,
+                listening: false
             }));
-        }
-        // 水平線
-        for (let j = 0; j <= MAP_BLOCKS; j++) {
             layer.add(new Konva.Line({
-                points: [0, j * GRID_SIZE, MAP_WIDTH, j * GRID_SIZE],
-                stroke: '#333',
-                strokeWidth: 1,
+                points: [0, i * GRID_SIZE, MAP_WIDTH, i * GRID_SIZE],
+                stroke: isMajor ? '#444' : '#2a2a2a',
+                strokeWidth: isMajor ? 2 : 1,
                 listening: false
             }));
         }
     }
 
-    drawGrid();
-    layer.draw();
+    // --- 4. 操作・レスポンシブ処理 ---
+    function toggleSidebar() {
+        const sb = document.getElementById('sidebar');
+        sb.classList.toggle('closed');
+        // サイドバー開閉後に描画範囲を更新
+        setTimeout(() => {
+            const container = document.getElementById('stage-parent');
+            stage.width(container.offsetWidth);
+            stage.height(container.offsetHeight);
+        }, 350);
+    }
 
-    // 初期位置を中央付近に
-    stage.position({ x: 50, y: 50 });
-
-    // --- スマホ・PC共通：ズーム機能 ---
-    const scaleBy = 1.1;
+    // PCズーム
     stage.on('wheel', (e) => {
         e.evt.preventDefault();
         const oldScale = stage.scaleX();
         const pointer = stage.getPointerPosition();
-
-        const mousePointTo = {
-            x: (pointer.x - stage.x()) / oldScale,
-            y: (pointer.y - stage.y()) / oldScale,
-        };
-
-        const newScale = e.evt.deltaY > 0 ? oldScale / scaleBy : oldScale * scaleBy;
+        const mousePointTo = { x: (pointer.x - stage.x()) / oldScale, y: (pointer.y - stage.y()) / oldScale };
+        const newScale = e.evt.deltaY > 0 ? oldScale / 1.1 : oldScale * 1.1;
         stage.scale({ x: newScale, y: newScale });
-
-        const newPos = {
-            x: pointer.x - mousePointTo.x * newScale,
-            y: pointer.y - mousePointTo.y * newScale,
-        };
-        stage.position(newPos);
+        stage.position({ x: pointer.x - mousePointTo.x * newScale, y: pointer.y - mousePointTo.y * newScale });
     });
 
-    // --- スマホ用：ピンチイン・アウト（2本指ズーム） ---
-    let lastDist = 0;
-    stage.on('touchmove', (e) => {
-        if (e.evt.touches.length === 2) {
-            e.evt.preventDefault();
-            const touch1 = e.evt.touches[0];
-            const touch2 = e.evt.touches[1];
-            const dist = Math.sqrt(
-                Math.pow(touch2.clientX - touch1.clientX, 2) +
-                Math.pow(touch2.clientY - touch1.clientY, 2)
-            );
-            if (!lastDist) { lastDist = dist; return; }
-
-            const scale = stage.scaleX() * (dist / lastDist);
-            stage.scale({ x: scale, y: scale });
-            lastDist = dist;
-        }
-    });
-    stage.on('touchend', () => { lastDist = 0; });
-
-    // リサイズ対応
-    function handleResize() {
+    // 初期実行
+    window.addEventListener('resize', () => {
         const container = document.getElementById('stage-parent');
         stage.width(container.offsetWidth);
         stage.height(container.offsetHeight);
-    }
-    window.addEventListener('resize', handleResize);
-    handleResize();
+    });
 
+    drawGrid();
+    layer.draw();
+    loadExternalData();
 </script>
 </body>
 </html>
