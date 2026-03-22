@@ -916,10 +916,15 @@
         }
     }, { passive: false });
 
-    // ページ全体で右クリックメニューを禁止
-　　window.addEventListener('contextmenu', (e) => {
-    　　e.preventDefault();
-　　});
+    // キャンバス上でのみ、ブラウザ標準の右クリックメニューを禁止
+// これにより、スマホの長押しによる自作メニュー表示を邪魔しません
+mainArea.addEventListener('contextmenu', (e) => {
+    // マウス（右クリック）の場合のみ標準メニューを禁止
+    // pointerTypeを確認することで、タッチによる長押しを許可します
+    if (e.pointerType === 'mouse') {
+        e.preventDefault();
+    }
+});
     
     loadConfig(); draw();
 </script>
