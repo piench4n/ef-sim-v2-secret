@@ -320,6 +320,7 @@
     let menuDisplayTimer = null;
     let isMovingItem = false;
     let touchStartPos = { x: 0, y: 0 };
+    let touchStartRawPos = { x: 0, y: 0 }; // 遊び判定用
 
     let isSelecting = false;
     let selectionStart = { x: 0, y: 0 };
@@ -657,32 +658,18 @@
 
     mainArea.addEventListener('mousedown', (e) => {
         if (e.button === 1) { isDraggingMap = true; lastMousePos = { x: e.clientX, y: e.clientY }; mainArea.classList.add('dragging-map'); return; }
-        
         if (e.button === 0) {
             const target = placedItems.find(item => mouseGrid.x >= item.x && mouseGrid.x < item.x + item.w && mouseGrid.y >= item.y && mouseGrid.y < item.y + item.h);
-            
             if (currentTool && currentTool.id === 'bulk') {
                 if (target) {
-                    if (!selectedGroup.includes(target)) {
-                        selectedGroup.push(target);
-                    } else {
-                        // 既に選択済みの施設をクリックした場合、トグルで外す
-                        // ドラッグ（移動）のための初期化もここで行う
-                        selectedGroup = selectedGroup.filter(i => i !== target);
-                    }
-                    // 移動のための準備（トグルで外れた場合でもdraggingItemには設定し、移動を可能にする。
-                    // ただしトグルで外れた直後に移動させるのは不自然なため、トグルの処理を優先。
-                    // 修正：移動を優先させるため、クリックした個体は「起点」として保持。
+                    if (!selectedGroup.includes(target)) selectedGroup.push(target);
+                    else selectedGroup = selectedGroup.filter(i => i !== target);
                     draggingItem = target;
                     bulkDragStart = { x: mouseGrid.x, y: mouseGrid.y };
                     selectedGroup.forEach(item => item._origPos = { x: item.x, y: item.y });
-                    // 起点施設がグループ外（単体）の場合の初期位置も保存
                     target._origPos = { x: target.x, y: target.y };
                 } else {
-                    isSelecting = true;
-                    selectionStart = { ...mouseGrid };
-                    selectionEnd = { ...mouseGrid };
-                    selectedGroup = [];
+                    isSelecting = true; selectionStart = { ...mouseGrid }; selectionEnd = { ...mouseGrid }; selectedGroup = [];
                 }
             } else if (currentTool && currentTool.id === 'eraser') {
                 if (target) { placedItems = placedItems.filter(i => i !== target); updateStats(); autoSave(); }
@@ -710,20 +697,15 @@
         const worldX = (e.clientX - rect.left - offsetX) / scale; const worldY = (e.clientY - rect.top - offsetY) / scale;
         mouseGrid.x = Math.max(0, Math.min(mapW, Math.floor(worldX / baseGridSize)));
         mouseGrid.y = Math.max(0, Math.min(mapH, Math.floor(worldY / baseGridSize)));
-        
         if (isSelecting) {
             selectionEnd = { ...mouseGrid };
         } else if (draggingItem) {
             if (currentTool && currentTool.id === 'bulk') {
                 const dx = mouseGrid.x - bulkDragStart.x;
                 const dy = mouseGrid.y - bulkDragStart.y;
-                // グループの一部なら全員、そうでなければ起点施設のみ移動
                 const targets = selectedGroup.includes(draggingItem) ? selectedGroup : [draggingItem];
-                targets.forEach(item => {
-                    item.x = item._origPos.x + dx;
-                    item.y = item._origPos.y + dy;
-                });
-            } else {
+                targets.forEach(item => { item.x = item._origPos.x + dx; item.y = item._origPos.y + dy; });
+            } else if (currentTool === null || (currentTool && currentTool.id !== 'bulk')) {
                 draggingItem.x = Math.min(mapW - draggingItem.w, mouseGrid.x);
                 draggingItem.y = Math.min(mapH - draggingItem.h, mouseGrid.y);
             }
@@ -733,14 +715,11 @@
 
     window.addEventListener('mouseup', () => {
         if (isSelecting) {
-            const x1 = Math.min(selectionStart.x, selectionEnd.x);
-            const x2 = Math.max(selectionStart.x, selectionEnd.x);
-            const y1 = Math.min(selectionStart.y, selectionEnd.y);
-            const y2 = Math.max(selectionStart.y, selectionEnd.y);
+            const x1 = Math.min(selectionStart.x, selectionEnd.x); const x2 = Math.max(selectionStart.x, selectionEnd.x);
+            const y1 = Math.min(selectionStart.y, selectionEnd.y); const y2 = Math.max(selectionStart.y, selectionEnd.y);
             selectedGroup = placedItems.filter(item => item.x < x2 && item.x + item.w > x1 && item.y < y2 && item.y + item.h > y1);
             isSelecting = false;
         }
-
         if (draggingItem) {
             if (currentTool && currentTool.id === 'bulk') {
                 const targets = selectedGroup.includes(draggingItem) ? selectedGroup : [draggingItem];
@@ -798,18 +777,15 @@
         } else if (e.touches.length === 1) {
             const touch = e.touches[0];
             touchStartPos = { x: touch.clientX, y: touch.clientY };
+            touchStartRawPos = { x: touch.clientX, y: touch.clientY }; // 遊び判定用
             updateTouchGridPos(touch);
             touchItem = placedItems.find(item => mouseGrid.x >= item.x && mouseGrid.x < item.x + item.w && mouseGrid.y >= item.y && mouseGrid.y < item.y + item.h);
             
             if (currentTool && currentTool.id === 'bulk') {
                 if (touchItem) {
-                    if (!selectedGroup.includes(touchItem)) {
-                        selectedGroup.push(touchItem);
-                    } else {
-                        selectedGroup = selectedGroup.filter(i => i !== touchItem);
-                    }
-                    isMovingItem = true;
-                    draggingItem = touchItem;
+                    if (!selectedGroup.includes(touchItem)) selectedGroup.push(touchItem);
+                    else selectedGroup = selectedGroup.filter(i => i !== touchItem);
+                    isMovingItem = true; draggingItem = touchItem;
                     bulkDragStart = { ...mouseGrid };
                     selectedGroup.forEach(item => item._origPos = { x: item.x, y: item.y });
                     touchItem._origPos = { x: touchItem.x, y: touchItem.y };
@@ -847,8 +823,14 @@
             clearTimeout(menuDisplayTimer); clearTimeout(longPressTimer);
         } else if (e.touches.length === 1) {
             const touch = e.touches[0];
-            const dist = Math.sqrt(Math.pow(touch.clientX - touchStartPos.x, 2) + Math.pow(touch.clientY - touchStartPos.y, 2));
-            if (dist > 30) clearTimeout(menuDisplayTimer);
+            const moveDist = Math.sqrt(Math.pow(touch.clientX - touchStartRawPos.x, 2) + Math.pow(touch.clientY - touchStartRawPos.y, 2));
+            
+            // 遊び(10px)以内なら移動処理を行わない
+            if (!isMovingItem && !isDraggingMap && !isSelecting && moveDist < 10) return;
+
+            const distFromStart = Math.sqrt(Math.pow(touch.clientX - touchStartPos.x, 2) + Math.pow(touch.clientY - touchStartPos.y, 2));
+            if (distFromStart > 30) clearTimeout(menuDisplayTimer);
+            
             updateTouchGridPos(touch);
             if (isSelecting) {
                 selectionEnd = { ...mouseGrid };
@@ -930,8 +912,8 @@
         const expCanvas = document.getElementById('exportCanvas');
         const expCtx = expCanvas.getContext('2d');
         expCanvas.width = mapW * baseGridSize; expCanvas.height = mapH * baseGridSize;
-        expCtx.fillStyle = getComputedStyle(document.body).getPropertyValue('--bg').trim(); expCtx.fillRect(0, 0, expCanvas.width, expCanvas.height);
-        expCtx.strokeStyle = getComputedStyle(document.body).getPropertyValue('--grid').trim(); expCtx.lineWidth = 1;
+        expCtx.fillStyle = varColor('--bg'); expCtx.fillRect(0, 0, expCanvas.width, expCanvas.height);
+        expCtx.strokeStyle = varColor('--grid'); expCtx.lineWidth = 1;
         for(let i=0; i<=mapW; i++) { expCtx.beginPath(); expCtx.moveTo(i*baseGridSize, 0); expCtx.lineTo(i*baseGridSize, expCanvas.height); expCtx.stroke(); }
         for(let j=0; j<=mapH; j++) { expCtx.beginPath(); expCtx.moveTo(0, j*baseGridSize); expCtx.lineTo(expCanvas.width, j*baseGridSize); expCtx.stroke(); }
         placedItems.forEach(item => { 
@@ -974,7 +956,7 @@
             });
             changeMapRatio("80:80"); renderButtons(); autoLoad(); updateStats();
             const btn = document.getElementById('toggle-sidebar');
-            btn.innerText = (window.innerWidth <= 768) ? '▲' : '◀';
+            btn.innerText = (window.innerWidth <= 768) ? (document.body.classList.contains('sidebar-closed') ? '▼' : '▲') : (document.body.classList.contains('sidebar-closed') ? '▶' : '◀');
             setTimeout(updateMobileSidebarHeight, 500);
         } catch (err) { document.getElementById('buildings-container').innerHTML = "JSON読み込みエラー"; }
     }
