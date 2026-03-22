@@ -916,10 +916,10 @@
         }
     }, { passive: false });
 
-    // キャンバス上での右クリックメニューを禁止（追記箇所）
-    mainArea.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-    });
+    // ページ全体で右クリックメニューを禁止
+　　window.addEventListener('contextmenu', (e) => {
+    　　e.preventDefault();
+　　});
     
     loadConfig(); draw();
 </script>
