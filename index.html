@@ -253,7 +253,7 @@
         <div class="grid-2">
             <button class="tool-btn action-btn" onclick="exportData()">書き出し</button>
             <button class="tool-btn action-btn" onclick="confirmImport()">読み込み</button>
-            <textarea id="data-text" placeholder="ここにコードを入力/出力" style="grid-column: span 2;"></textarea>
+            <textarea id="data-text" placeholder="ここにコードを入力" style="grid-column: span 2;"></textarea>
             <button class="tool-btn action-btn save-btn" onclick="downloadImage()">画像を保存 (PNG)</button>
         </div>
         <div class="warning-text">※履歴削除等でデータが消えるため、コードの書き出し保存を推奨します。</div>
@@ -457,7 +457,6 @@
     }
 
     function setTool(config) {
-        // 指示：もう一度タップで解除（移動モードへ）
         if (currentTool && currentTool.id === config.id) {
             setMoveMode();
             return;
@@ -844,7 +843,7 @@
         expCtx.strokeStyle = getComputedStyle(document.body).getPropertyValue('--grid').trim();
         expCtx.lineWidth = 1;
         for(let i=0; i<=mapW; i++) { expCtx.beginPath(); expCtx.moveTo(i*baseGridSize, 0); expCtx.lineTo(i*baseGridSize, expCanvas.height); expCtx.stroke(); }
-        for(let j=0; j<=mapH; j++) { expCtx.beginPath(); expCtx.moveTo(0, j*baseGridSize); expCtx.lineTo(expCanvas.width, j*baseGridSize); expCtx.stroke(); }
+        for(let j=0; j<=mapH; j++) { expCtx.beginPath(); expCtx.moveTo(0, j*baseGridSize); ctx.lineTo(expCanvas.width, j*baseGridSize); expCtx.stroke(); }
         placedItems.forEach(item => { 
             expCtx.fillStyle = item.color; expCtx.globalAlpha = 0.9; 
             expCtx.fillRect(item.x*baseGridSize+1, item.y*baseGridSize+1, item.w*baseGridSize-2, item.h*baseGridSize-2); 
@@ -856,15 +855,11 @@
     
     function exportData() {
         const code = btoa(unescape(encodeURIComponent(JSON.stringify(placedItems))));
-        const dataArea = document.getElementById('data-text');
-        if(dataArea) { 
-            dataArea.value = code;
-            navigator.clipboard.writeText(code).then(() => {
-                showModal('コードをコピーしました！', false);
-            }).catch(() => {
-                showModal('コードを書き出しました。コピーして保存してください。', false);
-            });
-        }
+        navigator.clipboard.writeText(code).then(() => {
+            showModal('コードをコピーしました！', false);
+        }).catch(() => {
+            showModal('コードを書き出しました。コピーして保存してください。', false);
+        });
     }
 
     async function loadConfig() {
