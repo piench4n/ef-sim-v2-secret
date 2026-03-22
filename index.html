@@ -890,6 +890,33 @@
         const isClosed = document.body.classList.contains('sidebar-closed');
         btn.innerText = (window.innerWidth <= 768) ? (isClosed ? '▼' : '▲') : (isClosed ? '▶' : '◀');
     });
+
+    // マウスホイールによるズーム処理を追加
+mainArea.addEventListener('wheel', (e) => {
+    e.preventDefault(); // ブラウザ全体のスクロールを防止
+
+    const rect = mainArea.getBoundingClientRect();
+    const zoomSpeed = 0.001; // ズームの速さ
+    const delta = e.deltaY;
+    const oldScale = scale;
+
+    // ズーム倍率の計算 (0.15倍 〜 1.5倍の範囲)
+    const minS = (window.innerWidth <= 768) ? 0.15 : 0.30;
+    let newScale = scale - delta * zoomSpeed;
+    newScale = Math.min(Math.max(minS, newScale), 1.5);
+
+    if (newScale !== oldScale) {
+        // マウスカーソルの位置を中心にズームするための計算
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+
+        offsetX -= (mx - offsetX) * (newScale / oldScale - 1);
+        offsetY -= (my - offsetY) * (newScale / oldScale - 1);
+
+        scale = newScale;
+        updateStatus();
+    }
+}, { passive: false });
     
     loadConfig(); draw();
 </script>
