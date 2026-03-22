@@ -229,8 +229,8 @@
             <div class="grid-2">
                 <button class="tool-btn action-btn active" onclick="setMoveMode()" id="btn-move">個別操作</button>
                 <button class="tool-btn action-btn" onclick="setBulkMoveMode()" id="btn-bulk-move">一括操作</button>
-                <button class="tool-btn action-btn" onclick="setEraser()" id="btn-eraser">個別削除</button>
-                <button class="tool-btn action-btn" onclick="confirmClear()" style="color:var(--danger)">一括削除</button>
+                <button class="tool-btn action-btn" onclick="setEraser()" id="btn-eraser">削除モード</button>
+                <button class="tool-btn action-btn" onclick="confirmClear()" style="color:var(--danger)">すべて削除</button>
             </div>
         </div>
 
@@ -321,14 +321,12 @@
     let isMovingItem = false;
     let touchStartPos = { x: 0, y: 0 };
 
+    // 新機能用変数
     let isSelecting = false;
     let selectionStart = { x: 0, y: 0 };
     let selectionEnd = { x: 0, y: 0 };
     let selectedGroup = [];
     let bulkDragStart = { x: 0, y: 0 };
-
-    // 直前に使用していた操作モードを記憶 (move, bulk, eraser)
-    let lastActiveMode = 'move';
 
     function updateMobileSidebarHeight() {
         if (window.innerWidth <= 768) {
@@ -445,10 +443,7 @@
 
     function setTool(config) {
         if (currentTool && currentTool.id === config.id) {
-            // 再クリック時、最後に使用していたモードを復元
-            if (lastActiveMode === 'bulk') setBulkMoveMode();
-            else if (lastActiveMode === 'eraser') setEraser();
-            else setMoveMode();
+            setMoveMode();
             return;
         }
         currentTool = JSON.parse(JSON.stringify(config));
@@ -461,9 +456,7 @@
     }
 
     function setEraser() {
-        currentTool = { id: 'eraser' }; 
-        lastActiveMode = 'eraser';
-        renderButtons();
+        currentTool = { id: 'eraser' }; renderButtons();
         document.getElementById('btn-eraser').classList.add('active');
         document.getElementById('btn-move').classList.remove('active');
         document.getElementById('btn-bulk-move').classList.remove('active');
@@ -471,9 +464,7 @@
     }
 
     function setMoveMode() {
-        currentTool = null; 
-        lastActiveMode = 'move';
-        renderButtons();
+        currentTool = null; renderButtons();
         document.getElementById('btn-eraser').classList.remove('active');
         document.getElementById('btn-move').classList.add('active');
         document.getElementById('btn-bulk-move').classList.remove('active');
@@ -481,9 +472,7 @@
     }
 
     function setBulkMoveMode() {
-        currentTool = { id: 'bulk' }; 
-        lastActiveMode = 'bulk';
-        renderButtons();
+        currentTool = { id: 'bulk' }; renderButtons();
         document.getElementById('btn-eraser').classList.remove('active');
         document.getElementById('btn-move').classList.remove('active');
         document.getElementById('btn-bulk-move').classList.add('active');
@@ -582,11 +571,11 @@
         for(let j=0; j<=mapH; j++) { ctx.beginPath(); ctx.moveTo(0, j*baseGridSize); ctx.lineTo(mapW*baseGridSize, j*baseGridSize); ctx.stroke(); }
         
         const activePreview = draggingItem || (currentTool && currentTool.id !== 'eraser' && currentTool.id !== 'bulk' ? currentTool : null);
-        const px = (activePreview && !selectedGroup.includes(activePreview)) ? Math.min(mapW - activePreview.w, mouseGrid.x) : -100;
-        const py = (activePreview && !selectedGroup.includes(activePreview)) ? Math.min(mapH - activePreview.h, mouseGrid.y) : -100;
+        const px = activePreview ? Math.min(mapW - activePreview.w, mouseGrid.x) : -100;
+        const py = activePreview ? Math.min(mapH - activePreview.h, mouseGrid.y) : -100;
 
         placedItems.forEach(item => {
-            const isDragging = (item === draggingItem || (selectedGroup.includes(item) && draggingItem));
+            const isDragging = (item === draggingItem || selectedGroup.includes(item) && draggingItem);
             const isSelected = selectedGroup.includes(item);
             ctx.fillStyle = item.color; 
             ctx.globalAlpha = isDragging ? 0.3 : 0.8;
@@ -604,7 +593,7 @@
             }
         });
 
-        if(activePreview && !selectedGroup.includes(activePreview)) {
+        if(activePreview) {
             ctx.globalAlpha = 0.5;
             const occupied = isAreaOccupied(px, py, activePreview.w, activePreview.h, draggingItem);
             ctx.fillStyle = occupied ? 'red' : activePreview.color;
@@ -613,6 +602,7 @@
             drawLabel(ctx, activePreview.name, (px + activePreview.w/2)*baseGridSize, (py + activePreview.h/2)*baseGridSize, activePreview.w, activePreview.h, activePreview.angle || 0);
         }
 
+        // 範囲選択枠の描画
         if (isSelecting) {
             ctx.strokeStyle = varColor('--accent');
             ctx.lineWidth = 2/scale;
@@ -640,6 +630,7 @@
     }
 
     mainArea.addEventListener('mousedown', (e) => {
+        const rect = mainArea.getBoundingClientRect();
         if (e.button === 1) { isDraggingMap = true; lastMousePos = { x: e.clientX, y: e.clientY }; mainArea.classList.add('dragging-map'); return; }
         
         if (e.button === 0) {
@@ -647,15 +638,18 @@
             
             if (currentTool && currentTool.id === 'bulk') {
                 if (target) {
-                    if (!selectedGroup.includes(target)) {
-                        selectedGroup.push(target);
-                    } else {
+                    // 施設をクリック
+                    if (selectedGroup.includes(target)) {
                         selectedGroup = selectedGroup.filter(i => i !== target);
+                    } else {
+                        selectedGroup.push(target);
                     }
+                    // ドラッグ準備
                     draggingItem = target;
                     bulkDragStart = { x: mouseGrid.x, y: mouseGrid.y };
                     selectedGroup.forEach(item => item._origPos = { x: item.x, y: item.y });
                 } else {
+                    // 何もない場所で範囲選択開始
                     isSelecting = true;
                     selectionStart = { ...mouseGrid };
                     selectionEnd = { ...mouseGrid };
@@ -665,7 +659,7 @@
                 if (target) { placedItems = placedItems.filter(i => i !== target); updateStats(); autoSave(); }
             } else if (target) {
                 draggingItem = target; dragStartPos = { x: target.x, y: target.y }; mainArea.classList.add('dragging-item');
-            } else if (currentTool && currentTool.id !== 'eraser' && currentTool.id !== 'bulk') {
+            } else if (currentTool && currentTool.id !== 'eraser') {
                 const px = Math.min(mapW - currentTool.w, mouseGrid.x);
                 const py = Math.min(mapH - currentTool.h, mouseGrid.y);
                 if (!isAreaOccupied(px, py, currentTool.w, currentTool.h)) { 
@@ -692,7 +686,7 @@
             selectionEnd = { ...mouseGrid };
         }
 
-        if (draggingItem && currentTool && currentTool.id === 'bulk' && selectedGroup.includes(draggingItem)) {
+        if (draggingItem && currentTool && currentTool.id === 'bulk') {
             const dx = mouseGrid.x - bulkDragStart.x;
             const dy = mouseGrid.y - bulkDragStart.y;
             selectedGroup.forEach(item => {
@@ -717,7 +711,8 @@
         }
 
         if (draggingItem) {
-            if (currentTool && currentTool.id === 'bulk' && selectedGroup.includes(draggingItem)) {
+            if (currentTool && currentTool.id === 'bulk') {
+                // 一括移動の確定判定
                 let canPlace = true;
                 selectedGroup.forEach(item => {
                     if (item.x < 0 || item.y < 0 || item.x + item.w > mapW || item.y + item.h > mapH ||
@@ -789,10 +784,10 @@
 
             if (currentTool && currentTool.id === 'bulk') {
                 if (touchItem) {
-                    if (!selectedGroup.includes(touchItem)) {
-                        selectedGroup.push(touchItem);
-                    } else {
+                    if (selectedGroup.includes(touchItem)) {
                         selectedGroup = selectedGroup.filter(i => i !== touchItem);
+                    } else {
+                        selectedGroup.push(touchItem);
                     }
                     isMovingItem = true;
                     draggingItem = touchItem;
@@ -865,14 +860,14 @@
                 offsetY += touch.clientY - lastMousePos.y;
                 lastMousePos = { x: touch.clientX, y: touch.clientY };
             } else if (isMovingItem && draggingItem) {
-                if (currentTool && currentTool.id === 'bulk' && selectedGroup.includes(draggingItem)) {
+                if (currentTool && currentTool.id === 'bulk') {
                     const dx = mouseGrid.x - bulkDragStart.x;
                     const dy = mouseGrid.y - bulkDragStart.y;
                     selectedGroup.forEach(item => {
                         item.x = item._origPos.x + dx;
                         item.y = item._origPos.y + dy;
                     });
-                } else if (!currentTool || currentTool.id !== 'bulk') {
+                } else {
                     draggingItem.x = Math.min(mapW - draggingItem.w, mouseGrid.x);
                     draggingItem.y = Math.min(mapH - draggingItem.h, mouseGrid.y);
                 }
@@ -897,7 +892,7 @@
         }
 
         if (draggingItem && isMovingItem) {
-            if (currentTool && currentTool.id === 'bulk' && selectedGroup.includes(draggingItem)) {
+            if (currentTool && currentTool.id === 'bulk') {
                 let canPlace = true;
                 selectedGroup.forEach(item => {
                     if (item.x < 0 || item.y < 0 || item.x + item.w > mapW || item.y + item.h > mapH ||
