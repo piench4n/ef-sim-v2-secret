@@ -14,6 +14,7 @@
             --accent-color: #ff9d00;
             --text-color: #e0e0e0;
             --border-color: #3f444a;
+            --transition-speed: 0.3s;
         }
 
         body {
@@ -34,7 +35,7 @@
             height: 100%;
             background: var(--sidebar-bg);
             border-right: 1px solid var(--border-color);
-            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: transform var(--transition-speed) cubic-bezier(0.4, 0, 0.2, 1);
             display: flex;
             flex-direction: column;
             z-index: 100;
@@ -90,7 +91,7 @@
             background-color: #111;
         }
 
-        /* UIボタン */
+        /* UIボタン (アイコン化) */
         .ui-btn {
             position: absolute;
             top: 15px;
@@ -99,14 +100,26 @@
             background: var(--accent-color);
             border: none;
             color: black;
-            padding: 10px 18px;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             cursor: pointer;
             border-radius: 4px;
             font-weight: bold;
             box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            transition: left var(--transition-speed) cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        /* ステータスバー */
+        /* サイドバーが閉じている時、ボタンを左端へ */
+        #sidebar.closed + #stage-parent .ui-btn {
+            left: 15px;
+        }
+        /* サイドバーが開いている時、ボタンをサイドバーの右隣へ */
+        /* ※JSで制御するため、ここでは基本位置のみ */
+
+        /* ステータスバー (追従アニメーション) */
         #status-bar {
             position: absolute;
             bottom: 15px;
@@ -122,6 +135,7 @@
             border-left: 3px solid var(--accent-color);
             display: flex;
             gap: 15px;
+            transition: left var(--transition-speed) cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         #loading {
@@ -145,7 +159,7 @@
 </nav>
 
 <main id="stage-parent">
-    <button class="ui-btn" onclick="toggleSidebar()">メニュー</button>
+    <button id="toggle-icon" class="ui-btn" onclick="toggleSidebar()">◀</button>
     
     <div id="status-bar">
         <div>座標: <span id="val-pos">0, 0</span></div>
@@ -185,7 +199,7 @@
             ];
             renderSidebar();
             const ld = document.getElementById('loading');
-            if(ld) ld.innerHTML = '<small style="color:#888">GitHubデータ未設定: プレビューモード</small>';
+            if(ld) ld.innerHTML = '<small style="color:#888">GitHubデータ未設定</small>';
         }
     }
 
@@ -241,10 +255,11 @@
         }
     }
 
-    // --- 4. 情報更新関数 (クランプ処理追加) ---
+    // --- 4. 情報更新関数 ---
     function updateStatus() {
         const scale = Math.round(stage.scaleX() * 100);
-        document.getElementById('val-zoom').innerText = scale + '%';
+        const zoomEl = document.getElementById('val-zoom');
+        if(zoomEl) zoomEl.innerText = scale + '%';
 
         const pointer = stage.getPointerPosition();
         if (pointer) {
@@ -252,16 +267,12 @@
                 x: (pointer.x - stage.x()) / stage.scaleX(),
                 y: (pointer.y - stage.y()) / stage.scaleX(),
             };
-
-            // 座標計算
             let gridX = Math.floor(mousePointTo.x / GRID_SIZE);
             let gridY = Math.floor(mousePointTo.y / GRID_SIZE);
-
-            // 【追加】クランプ処理：マイナスを0に、100超えを100に制限
             gridX = Math.max(0, Math.min(MAP_BLOCKS, gridX));
             gridY = Math.max(0, Math.min(MAP_BLOCKS, gridY));
-
-            document.getElementById('val-pos').innerText = `${gridX}, ${gridY}`;
+            const posEl = document.getElementById('val-pos');
+            if(posEl) posEl.innerText = `${gridX}, ${gridY}`;
         }
     }
 
@@ -271,15 +282,11 @@
         const oldScale = stage.scaleX();
         const pointer = stage.getPointerPosition();
         if (!pointer) return;
-        
         const mousePointTo = { x: (pointer.x - stage.x()) / oldScale, y: (pointer.y - stage.y()) / oldScale };
-        
         let newScale = e.evt.deltaY > 0 ? oldScale - ZOOM_STEP : oldScale + ZOOM_STEP;
         newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, newScale));
-
         stage.scale({ x: newScale, y: newScale });
         stage.position({ x: pointer.x - mousePointTo.x * newScale, y: pointer.y - mousePointTo.y * newScale });
-        
         updateStatus();
     });
 
@@ -301,11 +308,33 @@
     });
     stage.on('touchend', () => { lastDist = 0; });
 
-    // --- 6. UI制御 ---
+    // --- 6. UI制御 (アニメーション同期) ---
     function toggleSidebar() {
         const sb = document.getElementById('sidebar');
-        sb.classList.toggle('closed');
-        setTimeout(handleResize, 350);
+        const btn = document.getElementById('toggle-icon');
+        const statusBar = document.getElementById('status-bar');
+        const isClosed = sb.classList.toggle('closed');
+
+        if (isClosed) {
+            btn.innerText = "▶";
+            statusBar.style.left = "15px"; // 閉じている時は左端
+        } else {
+            btn.innerText = "◀";
+            // 開いている時はサイドバーの幅 + 余白
+            const sidebarWidth = document.getElementById('sidebar').offsetWidth;
+            statusBar.style.left = (sidebarWidth + 15) + "px";
+        }
+
+        // アニメーション中のCanvasリサイズ対応
+        let start = null;
+        function animateStep(timestamp) {
+            if (!start) start = timestamp;
+            handleResize();
+            if (timestamp - start < 350) { // 遷移時間より少し長めに回す
+                requestAnimationFrame(animateStep);
+            }
+        }
+        requestAnimationFrame(animateStep);
     }
 
     function handleResize() {
@@ -318,11 +347,18 @@
 
     window.addEventListener('resize', handleResize);
 
+    // 起動処理
     drawGrid();
     layer.draw();
     loadExternalData();
-    handleResize();
     
+    // 初期のステータスバー位置設定
+    setTimeout(() => {
+        const sidebarWidth = document.getElementById('sidebar').offsetWidth;
+        document.getElementById('status-bar').style.left = (sidebarWidth + 15) + "px";
+        handleResize();
+    }, 100);
+
     stage.position({ x: 20, y: 20 });
     updateStatus();
 </script>
