@@ -29,6 +29,7 @@
             display: flex; flex-direction: column; gap: 12px; overflow-y: auto; z-index: 100;
             transition: margin-left 0.3s ease, opacity 0.3s ease, transform 0.3s ease;
             -ms-overflow-style: none; scrollbar-width: none; box-sizing: border-box;
+            position: relative; /* ボタンの配置基準として追加 */
         }
         #sidebar::-webkit-scrollbar { display: none; }
         body.sidebar-closed #sidebar { margin-left: calc(var(--sidebar-w) * -1); opacity: 0; pointer-events: none; }
@@ -158,9 +159,9 @@
             
             #toggle-sidebar { 
                 left: 10px !important; 
-                /* 修正：初期位置をCSS変数で指定。JS実行前でも概ね正しい位置に置く */
-                top: var(--mobile-sidebar-height, 180px) !important;
-                position: fixed;
+                /* 修正：初期位置をサイドバーの直下に物理的に固定 */
+                top: 100% !important; 
+                position: absolute; 
                 z-index: 110;
                 border-radius: 0 0 4px 4px;
                 padding: 6px 15px;
@@ -168,11 +169,13 @@
                 border: 1px solid var(--btn-border);
                 border-top: none;
                 color: var(--accent);
-                transition: transform 0.3s ease, top 0.3s ease;
+                transition: transform 0.3s ease;
+                /* JSによるジャンプを防止 */
                 transform: none !important;
             }
 
             body.sidebar-closed #toggle-sidebar { 
+                position: fixed;
                 top: 0 !important; 
                 transform: none !important;
             }
@@ -208,9 +211,8 @@
 </head>
 <body>
 
-<button id="toggle-sidebar" onclick="toggleSidebar()">◀</button>
-
 <div id="sidebar">
+    <button id="toggle-sidebar" onclick="toggleSidebar()">◀</button>
     <h2>工業図面作成</h2>
 
     <div class="tool-group" id="dynamic-tools">
@@ -387,7 +389,6 @@
             btn.innerText = isClosed ? '▶' : '◀';
         }
         
-        // 閉じる・開くのタイミングで高さを再計算
         updateMobileSidebarHeight();
         
         setTimeout(() => {
@@ -419,7 +420,6 @@
             btn.classList.toggle('active', btn.innerText === btnLabel);
         });
         renderButtons();
-        // コンテンツ量変化に合わせて即座に高さを更新
         setTimeout(updateMobileSidebarHeight, 0);
     }
 
@@ -439,8 +439,6 @@
             });
             changeMapRatio("80:80"); 
             renderButtons(); autoLoad(); updateStats();
-            
-            // 起動時に即計算してCSS変数をセット
             updateMobileSidebarHeight();
 
             const btn = document.getElementById('toggle-sidebar');
@@ -856,7 +854,7 @@
         expCtx.strokeStyle = getComputedStyle(document.body).getPropertyValue('--grid').trim();
         expCtx.lineWidth = 1;
         for(let i=0; i<=mapW; i++) { expCtx.beginPath(); expCtx.moveTo(i*baseGridSize, 0); expCtx.lineTo(i*baseGridSize, expCanvas.height); expCtx.stroke(); }
-        for(let j=0; j<=mapH; j++) { expCtx.beginPath(); expCtx.moveTo(0, j*baseGridSize); ctx.lineTo(expCanvas.width, j*baseGridSize); expCtx.stroke(); }
+        for(let j=0; j<=mapH; j++) { expCtx.beginPath(); expCtx.moveTo(0, j*baseGridSize); ctx.lineTo(expCanvas.width, j*baseGridSize); ctx.stroke(); }
         placedItems.forEach(item => { 
             expCtx.fillStyle = item.color; expCtx.globalAlpha = 0.9; 
             expCtx.fillRect(item.x*baseGridSize+1, item.y*baseGridSize+1, item.w*baseGridSize-2, item.h*baseGridSize-2); 
@@ -904,7 +902,6 @@
                 btn.onclick = () => filterCategory(c);
                 catContainer.appendChild(btn);
             });
-            
             changeMapRatio("80:80"); 
             renderButtons(); autoLoad(); updateStats();
             updateMobileSidebarHeight();
