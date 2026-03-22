@@ -158,8 +158,8 @@
             
             #toggle-sidebar { 
                 left: 10px !important; 
-                top: 0px !important; 
-                bottom: auto !important;
+                /* 修正：初期位置をCSS変数で指定。JS実行前でも概ね正しい位置に置く */
+                top: var(--mobile-sidebar-height, 180px) !important;
                 position: fixed;
                 z-index: 110;
                 border-radius: 0 0 4px 4px;
@@ -168,12 +168,13 @@
                 border: 1px solid var(--btn-border);
                 border-top: none;
                 color: var(--accent);
-                transition: transform 0.3s ease;
-                transform: translateY(calc(var(--mobile-sidebar-height, 0px)));
+                transition: transform 0.3s ease, top 0.3s ease;
+                transform: none !important;
             }
 
             body.sidebar-closed #toggle-sidebar { 
-                transform: translateY(0); 
+                top: 0 !important; 
+                transform: none !important;
             }
 
             .tool-group {
@@ -323,8 +324,10 @@
     function updateMobileSidebarHeight() {
         if (window.innerWidth <= 768) {
             const sidebar = document.getElementById('sidebar');
-            const height = sidebar.offsetHeight;
-            document.documentElement.style.setProperty('--mobile-sidebar-height', height + 'px');
+            if (sidebar) {
+                const height = sidebar.offsetHeight;
+                document.documentElement.style.setProperty('--mobile-sidebar-height', height + 'px');
+            }
         }
     }
 
@@ -383,8 +386,11 @@
         } else {
             btn.innerText = isClosed ? '▶' : '◀';
         }
+        
+        // 閉じる・開くのタイミングで高さを再計算
+        updateMobileSidebarHeight();
+        
         setTimeout(() => {
-            updateMobileSidebarHeight();
             centerMap();
         }, 310);
     }
@@ -413,7 +419,8 @@
             btn.classList.toggle('active', btn.innerText === btnLabel);
         });
         renderButtons();
-        setTimeout(updateMobileSidebarHeight, 50);
+        // コンテンツ量変化に合わせて即座に高さを更新
+        setTimeout(updateMobileSidebarHeight, 0);
     }
 
     async function loadConfig() {
@@ -432,13 +439,16 @@
             });
             changeMapRatio("80:80"); 
             renderButtons(); autoLoad(); updateStats();
+            
+            // 起動時に即計算してCSS変数をセット
+            updateMobileSidebarHeight();
+
             const btn = document.getElementById('toggle-sidebar');
             if (window.innerWidth <= 768) {
                 btn.innerText = '▲';
             } else {
                 btn.innerText = '◀';
             }
-            setTimeout(updateMobileSidebarHeight, 500);
         } catch (err) { document.getElementById('buildings-container').innerHTML = "JSON読み込みエラー"; }
     }
 
@@ -895,17 +905,16 @@
                 catContainer.appendChild(btn);
             });
             
-            // 初期サイズを 80:80 で初期化するように変更
             changeMapRatio("80:80"); 
-            
             renderButtons(); autoLoad(); updateStats();
+            updateMobileSidebarHeight();
+
             const btn = document.getElementById('toggle-sidebar');
             if (window.innerWidth <= 768) {
                 btn.innerText = '▲';
             } else {
                 btn.innerText = '◀';
             }
-            setTimeout(updateMobileSidebarHeight, 500);
         } catch (err) { document.getElementById('buildings-container').innerHTML = "JSON読み込みエラー"; }
     }
 
