@@ -235,7 +235,7 @@
         </div>
 
         <div class="tool-group">
-            <label>マップサイズ</label>
+            <label>マップ設定</label>
             <select id="map-ratio" onchange="changeMapRatio(this.value)">
                 <option value="80:80">80 × 80</option>
                 <option value="70:70">70 × 70</option>
@@ -570,11 +570,11 @@
         for(let j=0; j<=mapH; j++) { ctx.beginPath(); ctx.moveTo(0, j*baseGridSize); ctx.lineTo(mapW*baseGridSize, j*baseGridSize); ctx.stroke(); }
         
         const activePreview = draggingItem || (currentTool && currentTool.id !== 'eraser' && currentTool.id !== 'bulk' ? currentTool : null);
-        const px = activePreview ? Math.min(mapW - activePreview.w, mouseGrid.x) : -100;
-        const py = activePreview ? Math.min(mapH - activePreview.h, mouseGrid.y) : -100;
+        const px = (activePreview && !selectedGroup.includes(activePreview)) ? Math.min(mapW - activePreview.w, mouseGrid.x) : -100;
+        const py = (activePreview && !selectedGroup.includes(activePreview)) ? Math.min(mapH - activePreview.h, mouseGrid.y) : -100;
 
         placedItems.forEach(item => {
-            const isDragging = (item === draggingItem || selectedGroup.includes(item) && draggingItem);
+            const isDragging = (item === draggingItem || (selectedGroup.includes(item) && draggingItem));
             const isSelected = selectedGroup.includes(item);
             ctx.fillStyle = item.color; 
             ctx.globalAlpha = isDragging ? 0.3 : 0.8;
@@ -592,7 +592,8 @@
             }
         });
 
-        if(activePreview) {
+        // プレビュー表示（未選択の施設を単体でドラッグまたはツール選択時）
+        if(activePreview && !selectedGroup.includes(activePreview)) {
             ctx.globalAlpha = 0.5;
             const occupied = isAreaOccupied(px, py, activePreview.w, activePreview.h, draggingItem);
             ctx.fillStyle = occupied ? 'red' : activePreview.color;
@@ -635,10 +636,13 @@
             
             if (currentTool && currentTool.id === 'bulk') {
                 if (target) {
-                    if (selectedGroup.includes(target)) {
-                        selectedGroup = selectedGroup.filter(i => i !== target);
-                    } else {
+                    if (!selectedGroup.includes(target)) {
                         selectedGroup.push(target);
+                    } else {
+                        // トグル式：既に選択済みの状態で再クリックした場合は解除。
+                        // ただし、ドラッグ（移動）を阻害しないようmouseupで処理するのが一般的ですが、指示に沿ってトグルを実装。
+                        // 移動のみさせたい場合は、mouseupでドラッグ距離が0ならトグルさせる等の調整が必要な場合があります。
+                        selectedGroup = selectedGroup.filter(i => i !== target);
                     }
                     draggingItem = target;
                     bulkDragStart = { x: mouseGrid.x, y: mouseGrid.y };
@@ -680,7 +684,7 @@
             selectionEnd = { ...mouseGrid };
         }
 
-        if (draggingItem && currentTool && currentTool.id === 'bulk') {
+        if (draggingItem && currentTool && currentTool.id === 'bulk' && selectedGroup.includes(draggingItem)) {
             const dx = mouseGrid.x - bulkDragStart.x;
             const dy = mouseGrid.y - bulkDragStart.y;
             selectedGroup.forEach(item => {
@@ -705,7 +709,7 @@
         }
 
         if (draggingItem) {
-            if (currentTool && currentTool.id === 'bulk') {
+            if (currentTool && currentTool.id === 'bulk' && selectedGroup.includes(draggingItem)) {
                 let canPlace = true;
                 selectedGroup.forEach(item => {
                     if (item.x < 0 || item.y < 0 || item.x + item.w > mapW || item.y + item.h > mapH ||
@@ -720,6 +724,7 @@
                     });
                 }
             } else {
+                // 個別移動または未選択施設の一時移動
                 const px = Math.min(mapW - draggingItem.w, mouseGrid.x);
                 const py = Math.min(mapH - draggingItem.h, mouseGrid.y);
                 if (!isAreaOccupied(px, py, draggingItem.w, draggingItem.h, draggingItem)) { draggingItem.x = px; draggingItem.y = py; }
@@ -777,10 +782,10 @@
 
             if (currentTool && currentTool.id === 'bulk') {
                 if (touchItem) {
-                    if (selectedGroup.includes(touchItem)) {
-                        selectedGroup = selectedGroup.filter(i => i !== touchItem);
-                    } else {
+                    if (!selectedGroup.includes(touchItem)) {
                         selectedGroup.push(touchItem);
+                    } else {
+                        selectedGroup = selectedGroup.filter(i => i !== touchItem);
                     }
                     isMovingItem = true;
                     draggingItem = touchItem;
@@ -853,14 +858,14 @@
                 offsetY += touch.clientY - lastMousePos.y;
                 lastMousePos = { x: touch.clientX, y: touch.clientY };
             } else if (isMovingItem && draggingItem) {
-                if (currentTool && currentTool.id === 'bulk') {
+                if (currentTool && currentTool.id === 'bulk' && selectedGroup.includes(draggingItem)) {
                     const dx = mouseGrid.x - bulkDragStart.x;
                     const dy = mouseGrid.y - bulkDragStart.y;
                     selectedGroup.forEach(item => {
                         item.x = item._origPos.x + dx;
                         item.y = item._origPos.y + dy;
                     });
-                } else {
+                } else if (!currentTool || currentTool.id !== 'bulk') {
                     draggingItem.x = Math.min(mapW - draggingItem.w, mouseGrid.x);
                     draggingItem.y = Math.min(mapH - draggingItem.h, mouseGrid.y);
                 }
@@ -885,7 +890,7 @@
         }
 
         if (draggingItem && isMovingItem) {
-            if (currentTool && currentTool.id === 'bulk') {
+            if (currentTool && currentTool.id === 'bulk' && selectedGroup.includes(draggingItem)) {
                 let canPlace = true;
                 selectedGroup.forEach(item => {
                     if (item.x < 0 || item.y < 0 || item.x + item.w > mapW || item.y + item.h > mapH ||
