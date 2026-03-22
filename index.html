@@ -701,7 +701,7 @@
             const deltaY = Math.abs(touch.clientY - touchStartPos.y);
             
             // 一定距離以上の移動で長押し判定をキャンセル
-            if (deltaX > 10 || deltaY > 10) {
+            if (deltaX > 30 || deltaY > 30) {
                 if (!isMovingItem) {
                     hasMoved = true;
                     clearTimeout(moveStartTimer);
