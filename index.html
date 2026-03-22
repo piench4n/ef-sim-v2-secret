@@ -21,7 +21,7 @@
             -webkit-touch-callout: none;
             user-select: none;
             -webkit-tap-highlight-color: transparent;
-            touch-action: none; /* ブラウザ標準のパン/ズームを無効化 */
+            touch-action: none;
         }
         
         #sidebar { 
@@ -721,13 +721,16 @@
     }, { passive: true });
 
     mainArea.addEventListener('touchmove', (e) => {
-        // 常にブラウザのデフォルト挙動を抑制
         if (e.cancelable) e.preventDefault();
 
         if (e.touches.length === 2 && touchStartDist > 0) {
             const currentDist = getTouchDistance(e.touches[0], e.touches[1]);
             const zoomRatio = currentDist / touchStartDist;
-            const newScale = Math.min(Math.max(0.30, lastScale * zoomRatio), 1.5);
+            
+            // 指示：スマホ版（画面幅768px以下）のみ最小縮尺を0.10、PC版を0.30に設定
+            const minS = (window.innerWidth <= 768) ? 0.10 : 0.30;
+            const newScale = Math.min(Math.max(minS, lastScale * zoomRatio), 1.5);
+
             if (newScale !== scale) {
                 const rect = mainArea.getBoundingClientRect();
                 const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
@@ -758,7 +761,7 @@
             }
             updateStatus();
         }
-    }, { passive: false }); // ズーム抑制のため passive: false
+    }, { passive: false });
 
     mainArea.addEventListener('touchend', (e) => {
         clearTimeout(longPressTimer);
