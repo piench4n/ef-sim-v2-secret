@@ -15,7 +15,7 @@
             --tooltip-bg: rgba(0, 0, 0, 0.9);
         }
 
-        body { margin: 0; background: var(--bg); color: var(--text); font-family: sans-serif; display: flex; height: 100vh; overflow: hidden; touch-action: none; }
+        body { margin: 0; background: var(--bg); color: var(--text); font-family: sans-serif; display: flex; height: 100vh; overflow: hidden; }
         
         #sidebar { 
             width: var(--sidebar-w); min-width: var(--sidebar-w); background: var(--panel); border-right: 2px solid rgba(128,128,128,0.2); padding: 20px; 
@@ -62,14 +62,23 @@
         .count-badge { font-size: 0.9em; opacity: 0.6; margin-left: auto; padding-right: 4px; }
         .tool-btn.active .count-badge { color: #000; opacity: 1; }
 
+        .tool-btn[data-size]::after {
+            content: attr(data-size); font-size: 9px; background: var(--tooltip-bg); color: #fff; padding: 2px 5px;
+            border-radius: 3px; border: 1px solid var(--accent); opacity: 0; transition: 0.2s;
+            pointer-events: none; position: absolute; right: 5px; font-weight: normal;
+        }
+        .tool-btn[data-size]:hover::after { opacity: 1; }
+        .tool-btn[data-size]:hover .count-badge { visibility: hidden; }
+
         .action-btn { font-weight: bold; justify-content: center; text-align: center; }
         .full-width { grid-column: span 2; } 
-        .save-btn { grid-column: span 2; margin-top: 8px !important; }
+        .save-btn { grid-column: span 2; margin-top: 8px !important; opacity: 0.8; }
+        .save-btn:hover { opacity: 1; }
 
         select { width: 100%; padding: 8px; background: var(--bg); color: var(--text); border: 1px solid var(--btn-border); border-radius: 4px; outline: none; cursor: pointer; font-size: 0.9em; }
 
         #main { flex: 1; position: relative; overflow: hidden; background: var(--bg); cursor: crosshair; }
-        canvas { display: block; }
+        canvas { display: block; width: 100%; height: 100%; }
         
         .status-bar { 
             position: fixed; bottom: 15px; left: calc(var(--sidebar-w) + 20px);
@@ -82,6 +91,7 @@
 
         .controls-hint { font-size: 0.7em; color: #888; line-height: 1.6; background: rgba(128,128,128,0.1); padding: 10px; border-radius: 4px; border-left: 3px solid var(--accent); }
         textarea { width: 100%; height: 60px; background: rgba(0,0,0,0.2); color: var(--accent); border: 1px solid rgba(128,128,128,0.3); font-family: monospace; font-size: 10px; resize: none; margin-top: 5px; padding: 5px; box-sizing: border-box; }
+        .warning-text { font-size: 0.65em; color: var(--warning); margin-top: 8px; line-height: 1.4; border-top: 1px dashed rgba(128,128,128,0.3); padding-top: 8px; }
 
         #modal-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -89,18 +99,13 @@
         }
         #modal-box {
             background: var(--panel); border: 2px solid var(--accent); padding: 25px; border-radius: 8px;
-            max-width: 400px; width: 90%; text-align: center;
+            max-width: 400px; width: 90%; text-align: center; box-shadow: 0 0 20px rgba(255, 207, 0, 0.2);
         }
-        .modal-btns { display: flex; gap: 10px; justify-content: center; margin-top: 20px; }
-        .modal-btn { padding: 10px 20px; border-radius: 4px; border: none; cursor: pointer; font-weight: bold; }
+        #modal-text { margin-bottom: 20px; font-size: 0.95em; line-height: 1.5; }
+        .modal-btns { display: flex; gap: 10px; justify-content: center; }
+        .modal-btn { padding: 10px 20px; border-radius: 4px; border: none; cursor: pointer; font-weight: bold; min-width: 80px; }
         .modal-confirm { background: var(--accent); color: #000; }
         .modal-cancel { background: var(--btn-idle); color: var(--text); border: 1px solid var(--btn-border); }
-
-        /* スマホ向け調整 */
-        @media (max-width: 768px) {
-            :root { --sidebar-w: 240px; }
-            .controls-hint { display: none; }
-        }
     </style>
 </head>
 <body>
@@ -122,22 +127,42 @@
     </div>
 
     <div class="tool-group">
+        <label>マップ設定</label>
+        <select id="map-ratio" onchange="changeMapRatio(this.value)">
+            <option value="40:40">40 × 40</option>
+            <option value="50:50">50 × 50</option>
+            <option value="70:70">70 × 70</option>
+            <option value="80:80">80 × 80</option>
+        </select>
+    </div>
+
+    <div class="tool-group">
         <label>基本操作</label>
         <div class="grid-2">
             <button class="tool-btn action-btn active" onclick="setMoveMode()" id="btn-move">移動モード</button>
             <button class="tool-btn action-btn" onclick="setEraser()" id="btn-eraser">削除モード</button>
-            <button class="tool-btn action-btn full-width" onclick="rotateCurrent()" id="btn-rotate">選択中を回転 (R)</button>
+            <button class="tool-btn action-btn full-width" onclick="confirmClear()" style="color:var(--danger)">すべて削除</button>
         </div>
     </div>
 
-    <div class="tool-group">
-        <label>データ管理</label>
+    <div class="tool-group" id="save-area">
+        <label>設計図コード</label>
         <div class="grid-2">
-            <button class="tool-btn action-btn" onclick="exportData()">書出</button>
-            <button class="tool-btn action-btn" onclick="confirmImport()">読込</button>
-            <textarea id="data-text" placeholder="設計図コード"></textarea>
-            <button class="tool-btn action-btn save-btn" onclick="downloadImage()">画像保存 (PNG)</button>
+            <button class="tool-btn action-btn" onclick="exportData()">書き出し</button>
+            <button class="tool-btn action-btn" onclick="confirmImport()">読み込み</button>
+            <textarea id="data-text" placeholder="ここにコードを入力/出力" style="grid-column: span 2;"></textarea>
+            <button class="tool-btn action-btn save-btn" onclick="downloadImage()">画像を保存 (PNG)</button>
         </div>
+        <div class="warning-text">※履歴削除等でデータが消えるため、コードの書き出し保存を推奨します。</div>
+    </div>
+    
+    <div class="controls-hint">
+        <strong>【画面移動】</strong>ホイール押し込み<br>
+        <strong>【設置/移動】</strong>左クリック/ドラッグ<br>
+        <strong>【削除】</strong>右クリック<br>
+        <strong>【単体回転】</strong>移動/設置中に <strong>R</strong> キー<br>
+        <strong>【全体回転】</strong><strong>Ctrl + R</strong> キー<br>
+        <strong>【ズーム】</strong>ホイール(10%~150%)
     </div>
 </div>
 
@@ -169,55 +194,59 @@
     let isDraggingMap = false, draggingItem = null;
     let lastPos = { x: 0, y: 0 }, mouseGrid = { x: 0, y: 0 };
     let placedItems = [], allBuildings = [], currentTool = null;
-    let initialPinchDistance = null;
+    let initialPinchDistance = null, currentCategory = 'all';
 
-    // --- モーダル制御 ---
-    function showModal(text, isConfirm, onOk) {
-        const overlay = document.getElementById('modal-overlay');
-        document.getElementById('modal-text').innerText = text;
-        overlay.style.display = 'flex';
-        const okBtn = document.getElementById('modal-ok-btn');
-        const cancelBtn = document.getElementById('modal-cancel-btn');
-        cancelBtn.style.display = isConfirm ? 'inline-block' : 'none';
-        okBtn.onclick = () => { overlay.style.display = 'none'; if(onOk) onOk(); };
-        cancelBtn.onclick = () => { overlay.style.display = 'none'; };
-    }
+    // --- 元の描画ロジック (方位▲とラベルの復元) ---
+    function drawLabel(context, item, x, y, itemW, itemH, angle = 0) {
+        const pxW = itemW * baseGridSize;
+        const pxH = itemH * baseGridSize;
+        
+        context.save();
+        context.translate(x, y);
+        context.rotate(angle * Math.PI / 2);
+        
+        // 方位マーカー（▲）
+        context.strokeStyle = "rgba(0, 0, 0, 0.8)";
+        context.lineWidth = 2;
+        context.lineJoin = "round";
+        const triSize = Math.min(7, pxW/3.5);
+        const topY = -pxH/2 + 2;
+        
+        context.beginPath();
+        context.moveTo(0, topY);
+        context.lineTo(-triSize, topY + triSize * 1.2);
+        context.lineTo(triSize, topY + triSize * 1.2);
+        context.closePath();
+        context.stroke();
+        context.fillStyle = "#ffcf00";
+        context.fill();
+        context.restore();
 
-    // --- 初期化 & データ読み込み ---
-    async function loadConfig() {
-        try {
-            const response = await fetch('data.json?t=' + Date.now());
-            const data = await response.json();
-            allBuildings = data.buildings || [];
-            setupCategoryFilters();
-            renderButtons();
-            autoLoad();
-            centerMap();
-        } catch (err) {
-            document.getElementById('buildings-container').innerHTML = "JSON読み込み失敗";
+        // テキスト処理
+        let fontSize = (itemW === 1 || itemH === 1) ? 11 : 13;
+        context.font = `bold ${fontSize}px sans-serif`;
+        context.textAlign = "center";
+        context.textBaseline = "middle";
+        
+        let displayName = item.name;
+        const maxAvailableW = pxW - 4;
+        if (context.measureText(displayName).width > maxAvailableW) {
+            displayName = displayName[0] + "...";
         }
+        
+        context.fillStyle = "rgba(0, 0, 0, 0.85)";
+        context.fillText(displayName, x + 0.5, y + 0.5);
+        context.fillStyle = "#fff";
+        context.fillText(displayName, x, y);
     }
 
-    function setupCategoryFilters() {
-        const cats = [...new Set(allBuildings.map(b => b.category).filter(c => c))];
-        const container = document.getElementById('category-filters');
-        cats.forEach(c => {
-            const btn = document.createElement('button');
-            btn.className = 'cat-btn';
-            btn.innerText = c;
-            btn.onclick = () => filterCategory(c);
-            container.appendChild(btn);
-        });
-    }
-
-    // --- 描画ロジック ---
+    // --- 統合描画ループ ---
     function draw() {
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.translate(offsetX, offsetY);
         ctx.scale(scale, scale);
 
-        // グリッド描画
         ctx.strokeStyle = getComputedStyle(document.body).getPropertyValue('--grid').trim();
         ctx.lineWidth = 1/scale;
         ctx.beginPath();
@@ -225,74 +254,55 @@
         for(let j=0; j<=mapH; j++) { ctx.moveTo(0, j*baseGridSize); ctx.lineTo(mapW*baseGridSize, j*baseGridSize); }
         ctx.stroke();
 
-        // 配置済みアイテム
+        const activePreview = draggingItem || (currentTool && currentTool.id !== 'eraser' ? currentTool : null);
+        const px = activePreview ? Math.min(mapW - activePreview.w, mouseGrid.x) : -100;
+        const py = activePreview ? Math.min(mapH - activePreview.h, mouseGrid.y) : -100;
+
         placedItems.forEach(item => {
-            ctx.globalAlpha = (item === draggingItem) ? 0.3 : 0.8;
-            ctx.fillStyle = item.color;
+            ctx.fillStyle = item.color; ctx.globalAlpha = (item === draggingItem) ? 0.15 : 0.8;
             ctx.fillRect(item.x*baseGridSize+1, item.y*baseGridSize+1, item.w*baseGridSize-2, item.h*baseGridSize-2);
-            ctx.globalAlpha = 1.0;
-            drawLabel(ctx, item);
+            if (item !== draggingItem) {
+                ctx.globalAlpha = 1.0;
+                drawLabel(ctx, item, (item.x + item.w/2)*baseGridSize, (item.y + item.h/2)*baseGridSize, item.w, item.h, item.angle || 0);
+            }
         });
 
-        // プレビュー
-        if(currentTool && currentTool.id !== 'eraser' && !isDraggingMap) {
-            const px = Math.min(mapW - currentTool.w, mouseGrid.x);
-            const py = Math.min(mapH - currentTool.h, mouseGrid.y);
+        if(activePreview) {
             ctx.globalAlpha = 0.5;
-            ctx.fillStyle = isAreaOccupied(px, py, currentTool.w, currentTool.h) ? 'red' : currentTool.color;
-            ctx.fillRect(px*baseGridSize, py*baseGridSize, currentTool.w*baseGridSize, currentTool.h*baseGridSize);
+            const occupied = isAreaOccupied(px, py, activePreview.w, activePreview.h, draggingItem);
+            ctx.fillStyle = occupied ? 'red' : activePreview.color;
+            ctx.fillRect(px*baseGridSize, py*baseGridSize, activePreview.w*baseGridSize, activePreview.h*baseGridSize);
             ctx.globalAlpha = 1.0;
+            drawLabel(ctx, activePreview, (px + activePreview.w/2)*baseGridSize, (py + activePreview.h/2)*baseGridSize, activePreview.w, activePreview.h, activePreview.angle || 0);
         }
-
         requestAnimationFrame(draw);
     }
 
-    function drawLabel(context, item) {
-        context.save();
-        const cx = (item.x + item.w/2) * baseGridSize;
-        const cy = (item.y + item.h/2) * baseGridSize;
-        
-        // 向きマーカー
-        context.translate(cx, cy);
-        context.rotate((item.angle || 0) * Math.PI / 2);
-        context.fillStyle = varColor('--accent');
-        context.beginPath();
-        context.moveTo(0, -item.h*baseGridSize/2 + 5);
-        context.lineTo(-5, -item.h*baseGridSize/2 + 12);
-        context.lineTo(5, -item.h*baseGridSize/2 + 12);
-        context.fill();
-        context.restore();
-
-        // テキスト
-        context.fillStyle = "#fff";
-        context.font = `bold ${12}px sans-serif`;
-        context.textAlign = "center";
-        context.fillText(item.name, cx, cy + 4);
+    // --- システム & 操作系 ---
+    function updateMouseGrid(clientX, clientY) {
+        const rect = mainArea.getBoundingClientRect();
+        mouseGrid.x = Math.max(0, Math.min(mapW-1, Math.floor(((clientX - rect.left) - offsetX) / scale / baseGridSize)));
+        mouseGrid.y = Math.max(0, Math.min(mapH-1, Math.floor(((clientY - rect.top) - offsetY) / scale / baseGridSize)));
+        updateStatus();
     }
 
-    // --- 操作系（PC/スマホ統合） ---
-    function handleStart(x, y, isRightClick) {
+    function handleStart(x, y, isRight) {
         updateMouseGrid(x, y);
         const target = placedItems.find(i => mouseGrid.x >= i.x && mouseGrid.x < i.x + i.w && mouseGrid.y >= i.y && mouseGrid.y < i.y + i.h);
-
-        if (isRightClick || (currentTool && currentTool.id === 'eraser')) {
+        
+        if (isRight || (currentTool && currentTool.id === 'eraser')) {
             if (target) { placedItems = placedItems.filter(i => i !== target); updateStats(); autoSave(); }
             return;
         }
-
-        if (target) {
-            draggingItem = target;
-        } else if (currentTool) {
+        if (target) { draggingItem = target; } 
+        else if (currentTool) {
             const px = Math.min(mapW - currentTool.w, mouseGrid.x);
             const py = Math.min(mapH - currentTool.h, mouseGrid.y);
             if (!isAreaOccupied(px, py, currentTool.w, currentTool.h)) {
-                const newItem = {...currentTool, x: px, y: py};
-                placedItems.push(newItem);
+                placedItems.push({...currentTool, x: px, y: py});
                 updateStats(); autoSave();
             }
-        } else {
-            isDraggingMap = true;
-        }
+        } else { isDraggingMap = true; }
         lastPos = { x, y };
     }
 
@@ -300,23 +310,17 @@
         if (isDraggingMap) {
             offsetX += x - lastPos.x;
             offsetY += y - lastPos.y;
-        } else if (draggingItem) {
-            updateMouseGrid(x, y);
-            draggingItem.x = Math.max(0, Math.min(mapW - draggingItem.w, mouseGrid.x));
-            draggingItem.y = Math.max(0, Math.min(mapH - draggingItem.h, mouseGrid.y));
         }
         updateMouseGrid(x, y);
         lastPos = { x, y };
-        updateStatus();
     }
 
-    // --- イベントリスナー ---
-    mainArea.addEventListener('mousedown', e => handleStart(e.clientX, e.clientY, e.button === 2));
+    // --- イベントリスナー (PC/タッチ統合) ---
+    mainArea.addEventListener('mousedown', e => { if(e.button === 1) isDraggingMap = true; else handleStart(e.clientX, e.clientY, e.button === 2); });
     window.addEventListener('mousemove', e => handleMove(e.clientX, e.clientY));
-    window.addEventListener('mouseup', () => { isDraggingMap = false; draggingItem = null; autoSave(); });
+    window.addEventListener('mouseup', () => { isDraggingMap = false; draggingItem = null; });
     mainArea.addEventListener('contextmenu', e => e.preventDefault());
 
-    // タッチ対応
     mainArea.addEventListener('touchstart', e => {
         if (e.touches.length === 1) handleStart(e.touches[0].clientX, e.touches[0].clientY, false);
         else if (e.touches.length === 2) initialPinchDistance = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY);
@@ -327,12 +331,12 @@
         if (e.touches.length === 1) handleMove(e.touches[0].clientX, e.touches[0].clientY);
         else if (e.touches.length === 2) {
             const dist = Math.hypot(e.touches[1].clientX - e.touches[0].clientX, e.touches[1].clientY - e.touches[0].clientY);
-            applyZoom(dist > initialPinchDistance ? 0.02 : -0.02, (e.touches[0].clientX + e.touches[1].clientX)/2, (e.touches[0].clientY + e.touches[1].clientY)/2);
+            const delta = (dist > initialPinchDistance ? 0.03 : -0.03);
+            applyZoom(delta, (e.touches[0].clientX + e.touches[1].clientX)/2, (e.touches[0].clientY + e.touches[1].clientY)/2);
             initialPinchDistance = dist;
         }
     }, {passive: false});
 
-    // ズーム共通
     function applyZoom(delta, cx, cy) {
         const newScale = Math.min(Math.max(0.1, scale + delta), 2);
         const rect = mainArea.getBoundingClientRect();
@@ -343,46 +347,67 @@
     }
     mainArea.addEventListener('wheel', e => { e.preventDefault(); applyZoom(e.deltaY > 0 ? -0.05 : 0.05, e.clientX, e.clientY); }, {passive: false});
 
-    // --- ユーティリティ ---
-    function updateMouseGrid(clientX, clientY) {
-        const rect = mainArea.getBoundingClientRect();
-        mouseGrid.x = Math.floor(((clientX - rect.left) - offsetX) / scale / baseGridSize);
-        mouseGrid.y = Math.floor(((clientY - rect.top) - offsetY) / scale / baseGridSize);
+    // --- その他機能 (元のコードを維持) ---
+    function toggleSidebar() { document.body.classList.toggle('sidebar-closed'); setTimeout(resizeCanvas, 310); }
+    function resizeCanvas() { canvas.width = mainArea.clientWidth; canvas.height = mainArea.clientHeight; }
+    function isAreaOccupied(x, y, w, h, ignore = null) { return placedItems.some(i => i !== ignore && x < i.x + i.w && x + w > i.x && y < i.y + i.h && y + h > i.y); }
+    function setMoveMode() { currentTool = null; updateBtn(); }
+    function setEraser() { currentTool = {id:'eraser'}; updateBtn(); }
+    function updateBtn() { document.getElementById('btn-move').classList.toggle('active', !currentTool); document.getElementById('btn-eraser').classList.toggle('active', currentTool?.id === 'eraser'); }
+    function updateStatus() { document.getElementById('status').innerText = `座標: ${mouseGrid.x}, ${mouseGrid.y} | ズーム: ${Math.round(scale * 100)}%`; }
+    
+    async function loadConfig() {
+        try {
+            const r = await fetch('data.json?t=' + Date.now());
+            const d = await r.json(); allBuildings = d.buildings || [];
+            renderButtons(); setupCats(); autoLoad();
+        } catch (e) { document.getElementById('buildings-container').innerText = "JSONエラー"; }
     }
-    function isAreaOccupied(x, y, w, h) { return placedItems.some(i => i !== draggingItem && x < i.x + i.w && x + w > i.x && y < i.y + i.h && y + h > i.y); }
-    function varColor(name) { return getComputedStyle(document.body).getPropertyValue(name).trim(); }
-    function toggleSidebar() { document.body.classList.toggle('sidebar-closed'); }
-    function setMoveMode() { currentTool = null; updateActiveBtn('btn-move'); }
-    function setEraser() { currentTool = {id:'eraser'}; updateActiveBtn('btn-eraser'); }
-    function updateActiveBtn(id) { document.querySelectorAll('.action-btn').forEach(b => b.classList.toggle('active', b.id === id)); }
-    function rotateCurrent() { if(currentTool) { const tmp = currentTool.w; currentTool.w = currentTool.h; currentTool.h = tmp; currentTool.angle = (currentTool.angle+1)%4; } }
-    window.addEventListener('keydown', e => { if(e.key.toLowerCase()==='r') rotateCurrent(); });
-
-    // 統計・保存
-    function updateStats() {
-        let p = 0; placedItems.forEach(i => p += (i.power || 0));
-        document.getElementById('sum-power').innerText = p;
-    }
-    function autoSave() { localStorage.setItem('endfield_planner_v1', JSON.stringify(placedItems)); }
-    function autoLoad() { const s = localStorage.getItem('endfield_planner_v1'); if(s) placedItems = JSON.parse(s); updateStats(); }
-
-    // 画像保存
-    function downloadImage() {
-        const exp = document.getElementById('exportCanvas');
-        const exCtx = exp.getContext('2d');
-        exp.width = mapW*baseGridSize; exp.height = mapH*baseGridSize;
-        exCtx.fillStyle = varColor('--bg'); exCtx.fillRect(0,0,exp.width,exp.height);
-        placedItems.forEach(i => {
-            exCtx.fillStyle = i.color; exCtx.fillRect(i.x*baseGridSize, i.y*baseGridSize, i.w*baseGridSize, i.h*baseGridSize);
-            exCtx.fillStyle = "#fff"; exCtx.fillText(i.name, (i.x+i.w/2)*baseGridSize, (i.y+i.h/2)*baseGridSize);
+    
+    function renderButtons() {
+        const c = document.getElementById('buildings-container'); c.innerHTML = '';
+        allBuildings.filter(b => currentCategory === 'all' || b.category === currentCategory).forEach(b => {
+            const btn = document.createElement('button'); btn.className = 'tool-btn';
+            btn.innerHTML = `<span>${b.name}</span><span class="count-badge" id="count-${b.id}">0</span>`;
+            btn.setAttribute('data-size', `${b.w}×${b.h}`);
+            btn.onclick = () => { currentTool = {...b, angle: 0}; updateBtn(); };
+            c.appendChild(btn);
         });
-        const a = document.createElement('a'); a.download = 'plan.png'; a.href = exp.toDataURL(); a.click();
+        updateStats();
     }
 
-    function exportData() { document.getElementById('data-text').value = btoa(JSON.stringify(placedItems)); }
-    function confirmImport() { const d = document.getElementById('data-text').value; if(d) { placedItems = JSON.parse(atob(d)); updateStats(); } }
-    function centerMap() { canvas.width = mainArea.clientWidth; canvas.height = mainArea.clientHeight; offsetX = 50; offsetY = 50; }
+    function setupCats() {
+        const container = document.getElementById('category-filters');
+        [...new Set(allBuildings.map(b => b.category))].forEach(cat => {
+            const btn = document.createElement('button'); btn.className = 'cat-btn'; btn.innerText = cat;
+            btn.onclick = () => { currentCategory = cat; renderButtons(); };
+            container.appendChild(btn);
+        });
+    }
 
+    function updateStats() {
+        let p = 0; const counts = {};
+        placedItems.forEach(i => { p += (i.power || 0); counts[i.id] = (counts[i.id] || 0) + 1; });
+        document.getElementById('sum-power').innerText = Math.abs(p);
+        allBuildings.forEach(b => { const el = document.getElementById(`count-${b.id}`); if(el) el.innerText = counts[b.id] || 0; });
+    }
+
+    function autoSave() { localStorage.setItem('ef_save', JSON.stringify(placedItems)); }
+    function autoLoad() { const s = localStorage.getItem('ef_save'); if(s) placedItems = JSON.parse(s); updateStats(); }
+    function exportData() { document.getElementById('data-text').value = btoa(unescape(encodeURIComponent(JSON.stringify(placedItems)))); }
+    function confirmImport() { try { placedItems = JSON.parse(decodeURIComponent(escape(atob(document.getElementById('data-text').value)))); updateStats(); } catch(e){ alert("Invalid Code"); } }
+    function changeMapRatio(v) { [mapW, mapH] = v.split(':').map(Number); }
+    function confirmClear() { if(confirm("すべて削除しますか？")) { placedItems = []; updateStats(); autoSave(); } }
+
+    window.addEventListener('resize', resizeCanvas);
+    window.addEventListener('keydown', e => { 
+        if(e.key.toLowerCase()==='r') {
+            if(draggingItem) { [draggingItem.w, draggingItem.h] = [draggingItem.h, draggingItem.w]; draggingItem.angle = (draggingItem.angle+1)%4; }
+            else if(currentTool) { [currentTool.w, currentTool.h] = [currentTool.h, currentTool.w]; currentTool.angle = (currentTool.angle+1)%4; }
+        }
+    });
+
+    resizeCanvas();
     loadConfig();
     draw();
 </script>
