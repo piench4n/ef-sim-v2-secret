@@ -915,6 +915,28 @@
             updateStatus();
         }
     }, { passive: false });
+
+    // スマホの長押しイベントを検知してメニューを表示
+    mainArea.addEventListener('contextmenu', (e) => {
+        if (e.pointerType === 'touch') {
+            e.preventDefault(); 
+            // 座標を計算して施設があるかチェック
+            const rect = mainArea.getBoundingClientRect();
+            const worldX = (e.clientX - rect.left - offsetX) / scale; 
+            const worldY = (e.clientY - rect.top - offsetY) / scale;
+            const tx = Math.floor(worldX / baseGridSize);
+            const ty = Math.floor(worldY / baseGridSize);
+            
+            const target = placedItems.find(item => tx >= item.x && tx < item.x + item.w && ty >= item.y && ty < item.y + item.h);
+            
+            if (target && !isMovingItem) {
+                touchItem = target;
+                showTouchMenu(target, e.clientX, e.clientY);
+            }
+        } else if (e.pointerType === 'mouse') {
+            e.preventDefault(); 
+        }
+    });
     
     loadConfig(); draw();
 </script>
