@@ -182,7 +182,7 @@
             }
 
             #buildings-container {
-                max-height: 180px;
+                max-height: 120px; /* 180pxから120pxに縮小 */
                 overflow-y: auto;
                 display: block;
             }
@@ -716,7 +716,7 @@
                     mainArea.classList.add('dragging-item');
                 }, 500);
                 
-                // 1.0秒後: メニュー表示（タイマー管理を整理）
+                // 1.0秒後: メニュー表示
                 menuDisplayTimer = setTimeout(() => {
                     showTouchMenu(touchItem, touchStartPos.x, touchStartPos.y);
                     isMovingItem = false;
