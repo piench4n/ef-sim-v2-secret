@@ -26,7 +26,7 @@
         #sidebar { 
             width: var(--sidebar-w); min-width: var(--sidebar-w); background: var(--panel); border-right: 2px solid rgba(128,128,128,0.2); padding: 20px; 
             display: flex; flex-direction: column; gap: 12px; overflow-y: auto; z-index: 100;
-            transition: margin-left 0.3s ease, opacity 0.3s ease;
+            transition: margin-left 0.3s ease, opacity 0.3s ease, transform 0.3s ease;
             -ms-overflow-style: none; scrollbar-width: none; box-sizing: border-box;
         }
         #sidebar::-webkit-scrollbar { display: none; }
@@ -36,7 +36,7 @@
             position: fixed; left: var(--sidebar-w); top: 10px; z-index: 110;
             background: var(--panel); border: 1px solid rgba(128,128,128,0.3); color: var(--accent);
             padding: 8px 12px; cursor: pointer; border-radius: 0 4px 4px 0;
-            transition: left 0.3s ease; font-weight: bold;
+            transition: left 0.3s ease, top 0.3s ease; font-weight: bold;
         }
         body.sidebar-closed #toggle-sidebar { left: 0; }
 
@@ -130,27 +130,35 @@
         }
         #touch-menu button:hover { background: var(--accent); color: #000; }
 
-        /* スマホ対応レイアウト (差し戻し) */
+        /* --- スマホ対応レイアウト (上部配置・横スクロール・左上固定) --- */
         @media (max-width: 768px) {
-            :root { --sidebar-w: 100%; }
-            body { flex-direction: column; }
             #sidebar { 
-                width: 100%; min-width: auto; border-right: none; border-bottom: 2px solid rgba(128,128,128,0.2);
-                max-height: 40vh; min-height: 150px;
+                width: 100%; min-width: auto; height: auto; border-right: none; border-bottom: 2px solid var(--accent);
+                position: fixed; top: 0; left: 0; padding: 10px; padding-top: 50px; /* ボタン領域 */
+                flex-direction: column; overflow-y: visible; max-height: 50vh;
             }
             body.sidebar-closed #sidebar { 
-                margin-left: 0; margin-bottom: calc(100% * -1); opacity: 0;
+                margin-left: 0; transform: translateY(-100%); opacity: 0;
             }
+            
             #toggle-sidebar { 
-                left: 10px; top: auto; bottom: 10px; border-radius: 4px 4px 0 0;
+                left: 10px !important; top: 10px !important; bottom: auto;
+                border-radius: 4px; padding: 8px 12px; background: var(--accent); color: #000;
             }
-            body.sidebar-closed #toggle-sidebar { bottom: 10px; }
-            #main { 
-                flex: 1; width: 100%;
+            body.sidebar-closed #toggle-sidebar { top: 10px; }
+
+            /* 設備リストを横スクロール化 */
+            #buildings-container {
+                display: flex; flex-direction: row; overflow-x: auto; gap: 8px;
+                padding-bottom: 5px; -webkit-overflow-scrolling: touch;
             }
-            .status-bar { 
-                left: 10px; bottom: 50px;
+            #buildings-container .tool-btn {
+                min-width: 130px; width: auto; margin: 0; flex-shrink: 0;
             }
+            
+            h2, .controls-hint, .warning-text { display: none; }
+            #main { width: 100%; height: 100vh; }
+            .status-bar { left: 10px; bottom: 10px; }
             body.sidebar-closed .status-bar { left: 10px; }
         }
     </style>
@@ -436,14 +444,18 @@
     function drawLabel(context, text, x, y, itemW, itemH, angle = 0) {
         const pxW = itemW * baseGridSize;
         const pxH = itemH * baseGridSize;
+        const padding = 2;
+        
         context.save();
         context.translate(x, y);
         context.rotate(angle * Math.PI / 2);
+        
         context.strokeStyle = "rgba(0, 0, 0, 0.8)";
         context.lineWidth = 2;
         context.lineJoin = "round";
         const triSize = Math.min(7, pxW/3.5);
         const topY = -pxH/2 + 2;
+        
         const drawTri = () => {
             context.beginPath();
             context.moveTo(0, topY);
@@ -451,17 +463,21 @@
             context.lineTo(triSize, topY + triSize * 1.2);
             context.closePath();
         };
+
         drawTri();
         context.stroke();
         context.fillStyle = "#ffcf00";
         context.fill();
         context.restore();
+
         let fontSize = (itemW === 1 || itemH === 1) ? 11 : 13;
         context.font = `bold ${fontSize}px sans-serif`;
         context.textAlign = "center";
         context.textBaseline = "middle";
+        
         const maxAvailableW = pxW - 4;
         let displayName = text;
+
         if (context.measureText(displayName).width > maxAvailableW) {
             let shortName = text[0] + "...";
             if (context.measureText(shortName).width <= maxAvailableW) {
@@ -473,6 +489,7 @@
                 }
             } else displayName = text[0];
         }
+        
         context.fillStyle = "rgba(0, 0, 0, 0.85)";
         context.fillText(displayName, x + 0.5, y + 0.5);
         context.fillStyle = "#fff";
@@ -486,11 +503,14 @@
         ctx.scale(scale, scale);
         ctx.strokeStyle = getComputedStyle(document.body).getPropertyValue('--grid').trim();
         ctx.lineWidth = 1/scale;
+        
         for(let i=0; i<=mapW; i++) { ctx.beginPath(); ctx.moveTo(i*baseGridSize, 0); ctx.lineTo(i*baseGridSize, mapH*baseGridSize); ctx.stroke(); }
         for(let j=0; j<=mapH; j++) { ctx.beginPath(); ctx.moveTo(0, j*baseGridSize); ctx.lineTo(mapW*baseGridSize, j*baseGridSize); ctx.stroke(); }
+
         const activePreview = draggingItem || (currentTool && currentTool.id !== 'eraser' ? currentTool : null);
         const px = activePreview ? Math.min(mapW - activePreview.w, mouseGrid.x) : -100;
         const py = activePreview ? Math.min(mapH - activePreview.h, mouseGrid.y) : -100;
+
         placedItems.forEach(item => {
             ctx.fillStyle = item.color; ctx.globalAlpha = (item === draggingItem) ? 0.15 : 0.8;
             ctx.fillRect(item.x*baseGridSize+1, item.y*baseGridSize+1, item.w*baseGridSize-2, item.h*baseGridSize-2);
@@ -511,6 +531,7 @@
                 }
             }
         });
+
         if(activePreview) {
             ctx.globalAlpha = 0.5;
             const occupied = isAreaOccupied(px, py, activePreview.w, activePreview.h, draggingItem);
@@ -531,7 +552,7 @@
         return placedItems.some(item => (item !== ignoreItem) && (x < item.x + item.w && x + w > item.x && y < item.y + item.h && y + h > item.y));
     }
 
-    // --- マウスイベント (PC用) ---
+    // --- マウスイベント（PC用） ---
     mainArea.addEventListener('mousedown', (e) => {
         if (e.button === 1) { isDraggingMap = true; lastMousePos = { x: e.clientX, y: e.clientY }; mainArea.classList.add('dragging-map'); return; }
         if (e.button === 0) {
@@ -583,15 +604,18 @@
         const newScale = Math.min(Math.max(0.30, scale + delta), 1.5);
         if (newScale !== scale) {
             const rect = mainArea.getBoundingClientRect();
-            offsetX -= (e.clientX - rect.left - offsetX) * (newScale / scale - 1);
-            offsetY -= (e.clientY - rect.top - offsetY) * (newScale / scale - 1);
+            const mx = e.clientX - rect.left; const my = e.clientY - rect.top;
+            offsetX -= (mx - offsetX) * (newScale / scale - 1);
+            offsetY -= (my - offsetY) * (newScale / scale - 1);
             scale = newScale; updateStatus();
         }
     }, { passive: false });
 
-    // --- タッチイベント (スマホ用修正版) ---
+    // --- タッチイベント（スマホ用修正版） ---
     function getTouchDistance(touch1, touch2) {
-        return Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY);
+        const dx = touch2.clientX - touch1.clientX;
+        const dy = touch2.clientY - touch1.clientY;
+        return Math.sqrt(dx * dx + dy * dy);
     }
 
     function updateTouchGridPos(touch) {
@@ -606,16 +630,21 @@
         closeTouchMenu();
         clearTimeout(longPressTimer);
         clearTimeout(menuDisplayTimer);
+        
         if (e.touches.length === 2) {
             touchStartDist = getTouchDistance(e.touches[0], e.touches[1]);
             lastScale = scale;
             isMovingItem = false;
+            touchItem = null;
         } else if (e.touches.length === 1) {
             const touch = e.touches[0];
             touchStartPos = { x: touch.clientX, y: touch.clientY };
             updateTouchGridPos(touch);
+            
             touchItem = placedItems.find(item => mouseGrid.x >= item.x && mouseGrid.x < item.x + item.w && mouseGrid.y >= item.y && mouseGrid.y < item.y + item.h);
+            touchStartTime = Date.now();
             isMovingItem = false;
+            
             if (touchItem) {
                 longPressTimer = setTimeout(() => {
                     isMovingItem = true;
@@ -623,6 +652,7 @@
                     dragStartPos = { x: touchItem.x, y: touchItem.y };
                     mainArea.classList.add('dragging-item');
                 }, 500);
+                
                 menuDisplayTimer = setTimeout(() => {
                     showTouchMenu(touchItem, touchStartPos.x, touchStartPos.y);
                     isMovingItem = false;
@@ -640,22 +670,32 @@
     mainArea.addEventListener('touchmove', (e) => {
         if (e.touches.length === 2) {
             const currentDist = getTouchDistance(e.touches[0], e.touches[1]);
-            const newScale = Math.min(Math.max(0.30, lastScale * (currentDist / touchStartDist)), 1.5);
+            const zoomRatio = currentDist / touchStartDist;
+            const newScale = Math.min(Math.max(0.30, lastScale * zoomRatio), 1.5);
+            
             if (newScale !== scale) {
                 const rect = mainArea.getBoundingClientRect();
                 const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
                 const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-                offsetX -= (centerX - rect.left - offsetX) * (newScale / scale - 1);
-                offsetY -= (centerY - rect.top - offsetY) * (newScale / scale - 1);
-                scale = newScale; updateStatus();
+                const mx = centerX - rect.left;
+                const my = centerY - rect.top;
+                
+                offsetX -= (mx - offsetX) * (newScale / scale - 1);
+                offsetY -= (my - offsetY) * (newScale / scale - 1);
+                scale = newScale;
+                updateStatus();
             }
             clearTimeout(menuDisplayTimer);
             clearTimeout(longPressTimer);
         } else if (e.touches.length === 1) {
             const touch = e.touches[0];
-            const dist = Math.hypot(touch.clientX - touchStartPos.x, touch.clientY - touchStartPos.y);
-            if (dist > 30) clearTimeout(menuDisplayTimer);
+            const dist = Math.sqrt(Math.pow(touch.clientX - touchStartPos.x, 2) + Math.pow(touch.clientY - touchStartPos.y, 2));
+            if (dist > 30) {
+                clearTimeout(menuDisplayTimer);
+            }
+
             updateTouchGridPos(touch);
+            
             if (isDraggingMap) {
                 offsetX += touch.clientX - lastMousePos.x;
                 offsetY += touch.clientY - lastMousePos.y;
@@ -668,51 +708,75 @@
         }
     }, { passive: true });
 
-    mainArea.addEventListener('touchend', () => {
+    mainArea.addEventListener('touchend', (e) => {
         clearTimeout(longPressTimer);
         clearTimeout(menuDisplayTimer);
+        touchStartDist = 0;
+        
         if (draggingItem && isMovingItem) {
             const px = Math.min(mapW - draggingItem.w, mouseGrid.x);
             const py = Math.min(mapH - draggingItem.h, mouseGrid.y);
             if (!isAreaOccupied(px, py, draggingItem.w, draggingItem.h, draggingItem)) {
-                draggingItem.x = px; draggingItem.y = py;
+                draggingItem.x = px;
+                draggingItem.y = py;
             } else {
-                draggingItem.x = dragStartPos.x; draggingItem.y = dragStartPos.y;
+                draggingItem.x = dragStartPos.x;
+                draggingItem.y = dragStartPos.y;
             }
-            updateStats(); autoSave();
+            updateStats();
+            autoSave();
         }
-        isDraggingMap = false; isMovingItem = false; draggingItem = null;
+        
+        isDraggingMap = false;
+        isMovingItem = false;
+        draggingItem = null;
         mainArea.classList.remove('dragging-map', 'dragging-item');
     }, { passive: true });
 
     function showTouchMenu(item, x, y) {
         const menu = document.getElementById('touch-menu');
-        document.getElementById('touch-menu-item-name').innerText = item.name;
+        const menuName = document.getElementById('touch-menu-item-name');
+        if (!menu || !item) return;
+        menuName.innerText = item.name;
         menu.style.display = 'block';
-        menu.style.left = Math.max(10, Math.min(x - 75, window.innerWidth - 160)) + 'px';
-        menu.style.top = Math.max(10, Math.min(y - 130, window.innerHeight - 120)) + 'px';
+        const menuWidth = 160;
+        const menuHeight = 100;
+        let posX = x - (menuWidth / 2);
+        let posY = y - (menuHeight + 30);
+        
+        menu.style.left = Math.max(10, Math.min(posX, window.innerWidth - menuWidth - 10)) + 'px';
+        menu.style.top = Math.max(10, Math.min(posY, window.innerHeight - menuHeight - 10)) + 'px';
     }
 
-    function closeTouchMenu() { document.getElementById('touch-menu').style.display = 'none'; }
+    function closeTouchMenu() {
+        document.getElementById('touch-menu').style.display = 'none';
+    }
+
     function deleteTouchItem() {
         if (touchItem) {
             placedItems = placedItems.filter(i => i !== touchItem);
-            updateStats(); autoSave(); closeTouchMenu();
+            updateStats();
+            autoSave();
+            closeTouchMenu();
+            touchItem = null;
         }
     }
 
     document.addEventListener('click', (e) => {
         const menu = document.getElementById('touch-menu');
-        if (menu.style.display === 'block' && !menu.contains(e.target)) closeTouchMenu();
+        if (menu && menu.style.display === 'block' && !menu.contains(e.target)) {
+            closeTouchMenu();
+        }
     });
 
     function updateStatus() { 
-        document.getElementById('status').innerText = `座標: ${mouseGrid.x}, ${mouseGrid.y} | ズーム: ${Math.round(scale * 100)}%`; 
+        const statusEl = document.getElementById('status');
+        if(statusEl) statusEl.innerText = `座標: ${mouseGrid.x}, ${mouseGrid.y} | ズーム: ${Math.round(scale * 100)}%`; 
     }
     function autoSave() { localStorage.setItem('endfield_save', JSON.stringify(placedItems)); }
     function autoLoad() { 
-        const saved = localStorage.getItem('endfield_save');
-        if (saved) try { placedItems = JSON.parse(saved); updateStats(); } catch (e) {}
+        const saved = localStorage.getItem('endfield_save'); 
+        if (saved) try { placedItems = JSON.parse(saved); updateStats(); } catch (e) {} 
     }
 
     function downloadImage() {
@@ -737,22 +801,8 @@
     
     function exportData() {
         const code = btoa(unescape(encodeURIComponent(JSON.stringify(placedItems))));
-        document.getElementById('data-text').value = code;
-    }
-
-    async function loadConfig() {
-        try {
-            const response = await fetch('data.json?t=' + Date.now());
-            const data = await response.json();
-            allBuildings = data.buildings || [];
-            const cats = [...new Set(allBuildings.map(b => b.category).filter(c => c))];
-            const catContainer = document.getElementById('category-filters');
-            cats.forEach(c => {
-                const btn = document.createElement('button'); btn.className = 'cat-btn'; btn.innerText = c;
-                btn.onclick = () => filterCategory(c); catContainer.appendChild(btn);
-            });
-            changeMapRatio("40:40"); renderButtons(); autoLoad();
-        } catch (err) {}
+        const dataArea = document.getElementById('data-text');
+        if(dataArea) { dataArea.value = code; showModal('コードを書き出しました。コピーして保存してください。', false); }
     }
 
     window.addEventListener('resize', centerMap);
