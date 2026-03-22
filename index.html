@@ -26,19 +26,17 @@
         #sidebar { 
             width: var(--sidebar-w); min-width: var(--sidebar-w); background: var(--panel); border-right: 2px solid rgba(128,128,128,0.2); padding: 20px; 
             display: flex; flex-direction: column; gap: 12px; overflow-y: auto; z-index: 100;
-            transition: transform 0.3s ease, opacity 0.3s ease;
+            transition: margin-left 0.3s ease, opacity 0.3s ease, transform 0.3s ease;
             -ms-overflow-style: none; scrollbar-width: none; box-sizing: border-box;
         }
         #sidebar::-webkit-scrollbar { display: none; }
-        
-        /* PC版：横方向の開閉 */
-        body.sidebar-closed #sidebar { transform: translateX(calc(var(--sidebar-w) * -1)); opacity: 0; pointer-events: none; }
+        body.sidebar-closed #sidebar { margin-left: calc(var(--sidebar-w) * -1); opacity: 0; pointer-events: none; }
 
         #toggle-sidebar {
             position: fixed; left: var(--sidebar-w); top: 10px; z-index: 110;
             background: var(--panel); border: 1px solid rgba(128,128,128,0.3); color: var(--accent);
             padding: 8px 12px; cursor: pointer; border-radius: 0 4px 4px 0;
-            transition: left 0.3s ease, transform 0.3s ease, top 0.3s ease; font-weight: bold;
+            transition: left 0.3s ease, top 0.3s ease, transform 0.3s ease; font-weight: bold;
         }
         body.sidebar-closed #toggle-sidebar { left: 0; }
 
@@ -132,12 +130,13 @@
         }
         #touch-menu button:hover { background: var(--accent); color: #000; }
 
-        /* --- スマホ対応レイアウト (完成修正版) --- */
+        /* --- スマホ対応レイアウト (サイドバー全体横スクロール & ボタン自動追従) --- */
         @media (max-width: 768px) {
             #sidebar { 
                 width: 100%; min-width: 100%; height: auto; border-right: none; 
                 border-bottom: 2px solid var(--accent);
                 position: fixed; top: 0; left: 0; padding: 15px; 
+                padding-top: 15px; 
                 flex-direction: row; 
                 overflow-x: auto; 
                 overflow-y: hidden;
@@ -147,27 +146,17 @@
                 box-sizing: border-box;
                 max-height: none;
                 z-index: 100;
-                /* JSなしで連動させるため、初期状態を明示 */
-                transform: translateY(0);
-                transition: transform 0.3s ease, opacity 0.3s ease;
+                transition: transform 0.3s ease;
             }
-            /* スマホ版：縦方向の開閉 */
             body.sidebar-closed #sidebar { 
-                transform: translateY(-100%); 
-                opacity: 0; 
-                pointer-events: none; 
+                margin-left: 0; transform: translateY(-100%); opacity: 0;
             }
             
             #toggle-sidebar { 
                 left: 10px !important; 
-                top: auto !important;
-                /* 初期配置：サイドバーの下端に固定（JSを使わない計算式） */
-                bottom: auto;
-                margin-top: 0;
-                /* サイドバーが開いている時の位置。JSを使わずCSS変数もなしで配置。
-                   サイドバーが閉じるとこのボタンも一緒に動くように後述のtransformで制御 */
-                position: fixed; 
-                top: 0; /* 基準を上端に */
+                top: 0px !important; 
+                bottom: auto !important;
+                position: fixed;
                 z-index: 110;
                 border-radius: 0 0 4px 4px;
                 padding: 6px 15px;
@@ -175,17 +164,29 @@
                 border: 1px solid var(--btn-border);
                 border-top: none;
                 color: var(--accent);
-                /* 初期位置：サイドバーが表示されている前提の高さ（固定ではなく、開ききった位置を想定） */
-                transform: translateY(180px); /* 暫定：JSで上書きされる前の安全値 */
+                transition: transform 0.3s ease;
+                /* JSのoffsetHeightを利用して位置を決定 */
+                transform: translateY(calc(var(--mobile-sidebar-height, 0px)));
             }
 
-            /* スマホ版のボタン追従ロジック */
             body.sidebar-closed #toggle-sidebar { 
-                transform: translateY(0) !important; /* サイドバーが消えたら最上部に移動 */
+                transform: translateY(0); 
             }
 
-            .tool-group { min-width: 260px; flex-shrink: 0; margin-bottom: 0; display: flex; flex-direction: column; }
-            #buildings-container { max-height: 180px; overflow-y: auto; display: block; }
+            .tool-group {
+                min-width: 260px; 
+                flex-shrink: 0; 
+                margin-bottom: 0;
+                display: flex;
+                flex-direction: column;
+            }
+
+            #buildings-container {
+                max-height: 180px;
+                overflow-y: auto;
+                display: block;
+            }
+
             h2, .controls-hint, .warning-text { display: none; }
             #main { width: 100%; height: 100vh; }
             .status-bar { left: 10px; bottom: 10px; }
@@ -240,6 +241,13 @@
         </div>
         <div class="warning-text">※履歴削除等でデータが消えるため、コードの書き出し保存を推奨します。</div>
     </div>
+    
+    <div class="controls-hint">
+        <strong>【PC操作】</strong><br>
+        画面移動: ホイール押し込み | 設置/移動: 左クリック/ドラッグ | 削除: 右クリック | 単体回転: R キー | 全体回転: Ctrl+R | ズーム: ホイール<br>
+        <strong>【スマホ操作】</strong><br>
+        画面移動: 1本指ドラッグ | 設置/移動: タップ後ドラッグ(0.5秒) | 削除: 長押し(1秒) | ズーム: 2本指ピンチ
+    </div>
 </div>
 
 <div id="main">
@@ -286,6 +294,7 @@
     let allBuildings = [];
     let currentCategory = 'all';
 
+    // タッチ関連変数
     let touchStartDist = 0;
     let lastScale = 0.30;
     let touchItem = null;
@@ -295,21 +304,12 @@
     let isMovingItem = false;
     let touchStartPos = { x: 0, y: 0 };
 
-    // スマホ版でボタンをサイドバーの直下に吸い付かせるための高さ計算
-    function updateMobileSidebarPosition() {
+    // スマホ用サイドバーの高さを計算してCSS変数にセットする
+    function updateMobileSidebarHeight() {
         if (window.innerWidth <= 768) {
             const sidebar = document.getElementById('sidebar');
-            const btn = document.getElementById('toggle-sidebar');
-            const isClosed = document.body.classList.contains('sidebar-closed');
-            if (!isClosed) {
-                const height = sidebar.offsetHeight;
-                btn.style.transform = `translateY(${height}px)`;
-            } else {
-                btn.style.transform = `translateY(0)`;
-            }
-        } else {
-            // PC版ではインラインスタイルを消してCSS側に任せる
-            document.getElementById('toggle-sidebar').style.transform = '';
+            const height = sidebar.offsetHeight;
+            document.documentElement.style.setProperty('--mobile-sidebar-height', height + 'px');
         }
     }
 
@@ -362,15 +362,17 @@
         const btn = document.getElementById('toggle-sidebar');
         const isClosed = document.body.classList.contains('sidebar-closed');
         
+        // 指示：PCとスマホで矢印を使い分ける
         if (window.innerWidth <= 768) {
             btn.innerText = isClosed ? '▼' : '▲';
         } else {
             btn.innerText = isClosed ? '▶' : '◀';
         }
 
-        // アニメーション完了後に位置を確定
-        updateMobileSidebarPosition();
-        setTimeout(centerMap, 310);
+        setTimeout(() => {
+            updateMobileSidebarHeight();
+            centerMap();
+        }, 310);
     }
 
     function updateStats() {
@@ -397,8 +399,8 @@
             btn.classList.toggle('active', btn.innerText === btnLabel);
         });
         renderButtons();
-        // コンテンツ量変化に合わせてボタン位置を即座に更新
-        setTimeout(updateMobileSidebarPosition, 50);
+        // コンテンツ量変化に伴い高さを更新
+        setTimeout(updateMobileSidebarHeight, 50);
     }
 
     async function loadConfig() {
@@ -417,14 +419,14 @@
             });
             changeMapRatio("40:40"); renderButtons(); autoLoad(); updateStats();
             
+            // 初期の矢印設定
             const btn = document.getElementById('toggle-sidebar');
             if (window.innerWidth <= 768) {
                 btn.innerText = '▲';
             } else {
                 btn.innerText = '◀';
             }
-            // 読み込み完了後に正しい位置へ
-            setTimeout(updateMobileSidebarPosition, 100);
+            setTimeout(updateMobileSidebarHeight, 500);
         } catch (err) { document.getElementById('buildings-container').innerHTML = "JSON読み込みエラー"; }
     }
 
@@ -504,14 +506,18 @@
     function drawLabel(context, text, x, y, itemW, itemH, angle = 0) {
         const pxW = itemW * baseGridSize;
         const pxH = itemH * baseGridSize;
+        const padding = 2;
+        
         context.save();
         context.translate(x, y);
         context.rotate(angle * Math.PI / 2);
+        
         context.strokeStyle = "rgba(0, 0, 0, 0.8)";
         context.lineWidth = 2;
         context.lineJoin = "round";
         const triSize = Math.min(7, pxW/3.5);
         const topY = -pxH/2 + 2;
+        
         const drawTri = () => {
             context.beginPath();
             context.moveTo(0, topY);
@@ -519,17 +525,21 @@
             context.lineTo(triSize, topY + triSize * 1.2);
             context.closePath();
         };
+
         drawTri();
         context.stroke();
         context.fillStyle = "#ffcf00";
         context.fill();
         context.restore();
+
         let fontSize = (itemW === 1 || itemH === 1) ? 11 : 13;
         context.font = `bold ${fontSize}px sans-serif`;
         context.textAlign = "center";
         context.textBaseline = "middle";
+        
         const maxAvailableW = pxW - 4;
         let displayName = text;
+
         if (context.measureText(displayName).width > maxAvailableW) {
             let shortName = text[0] + "...";
             if (context.measureText(shortName).width <= maxAvailableW) {
@@ -541,6 +551,7 @@
                 }
             } else displayName = text[0];
         }
+        
         context.fillStyle = "rgba(0, 0, 0, 0.85)";
         context.fillText(displayName, x + 0.5, y + 0.5);
         context.fillStyle = "#fff";
@@ -554,11 +565,14 @@
         ctx.scale(scale, scale);
         ctx.strokeStyle = getComputedStyle(document.body).getPropertyValue('--grid').trim();
         ctx.lineWidth = 1/scale;
+        
         for(let i=0; i<=mapW; i++) { ctx.beginPath(); ctx.moveTo(i*baseGridSize, 0); ctx.lineTo(i*baseGridSize, mapH*baseGridSize); ctx.stroke(); }
         for(let j=0; j<=mapH; j++) { ctx.beginPath(); ctx.moveTo(0, j*baseGridSize); ctx.lineTo(mapW*baseGridSize, j*baseGridSize); ctx.stroke(); }
+
         const activePreview = draggingItem || (currentTool && currentTool.id !== 'eraser' ? currentTool : null);
         const px = activePreview ? Math.min(mapW - activePreview.w, mouseGrid.x) : -100;
         const py = activePreview ? Math.min(mapH - activePreview.h, mouseGrid.y) : -100;
+
         placedItems.forEach(item => {
             ctx.fillStyle = item.color; ctx.globalAlpha = (item === draggingItem) ? 0.15 : 0.8;
             ctx.fillRect(item.x*baseGridSize+1, item.y*baseGridSize+1, item.w*baseGridSize-2, item.h*baseGridSize-2);
@@ -566,7 +580,20 @@
                 ctx.globalAlpha = 1.0;
                 drawLabel(ctx, item.name, (item.x + item.w/2)*baseGridSize, (item.y + item.h/2)*baseGridSize, item.w, item.h, item.angle || 0);
             }
+            if(item.range > 0 && item !== draggingItem) {
+                let show = false;
+                if(activePreview) {
+                    const cx = item.x + 0.5; const cy = item.y + 0.5;
+                    if (px < cx + item.range && px + activePreview.w > cx - item.range && py < cy + item.range && py + activePreview.h > cy - item.range) show = true;
+                }
+                if(show) {
+                    ctx.strokeStyle = '#ffcf00'; ctx.lineWidth = 2/scale; ctx.setLineDash([5/scale, 5/scale]);
+                    ctx.strokeRect((item.x-item.range+0.5)*baseGridSize, (item.y-item.range+0.5)*baseGridSize, (item.range*2)*baseGridSize, (item.range*2)*baseGridSize);
+                    ctx.setLineDash([]);
+                }
+            }
         });
+
         if(activePreview) {
             ctx.globalAlpha = 0.5;
             const occupied = isAreaOccupied(px, py, activePreview.w, activePreview.h, draggingItem);
@@ -574,6 +601,11 @@
             ctx.fillRect(px*baseGridSize, py*baseGridSize, activePreview.w*baseGridSize, activePreview.h*baseGridSize);
             ctx.globalAlpha = 1.0;
             drawLabel(ctx, activePreview.name, (px + activePreview.w/2)*baseGridSize, (py + activePreview.h/2)*baseGridSize, activePreview.w, activePreview.h, activePreview.angle || 0);
+            if(activePreview.range > 0) {
+                ctx.strokeStyle = '#ffcf00'; ctx.lineWidth = 2/scale; ctx.setLineDash([5/scale, 5/scale]);
+                ctx.strokeRect((px-activePreview.range+0.5)*baseGridSize, (py-activePreview.range+0.5)*baseGridSize, (activePreview.range*2)*baseGridSize, (activePreview.range*2)*baseGridSize);
+                ctx.setLineDash([]);
+            }
         }
         requestAnimationFrame(draw);
     }
@@ -582,6 +614,7 @@
         return placedItems.some(item => (item !== ignoreItem) && (x < item.x + item.w && x + w > item.x && y < item.y + item.h && y + h > item.y));
     }
 
+    // --- マウスイベント (PC用) ---
     mainArea.addEventListener('mousedown', (e) => {
         if (e.button === 1) { isDraggingMap = true; lastMousePos = { x: e.clientX, y: e.clientY }; mainArea.classList.add('dragging-map'); return; }
         if (e.button === 0) {
@@ -599,6 +632,10 @@
                     placedItems.push(newItem); updateStats(); autoSave(); 
                 }
             }
+        }
+        if (e.button === 2) { 
+            placedItems = placedItems.filter(item => !(mouseGrid.x >= item.x && mouseGrid.x < item.x + item.w && mouseGrid.y >= item.y && mouseGrid.y < item.y + item.h)); 
+            updateStats(); autoSave(); 
         }
     });
 
@@ -636,6 +673,13 @@
         }
     }, { passive: false });
 
+    // --- タッチイベント (スマホ用修正版) ---
+    function getTouchDistance(touch1, touch2) {
+        const dx = touch2.clientX - touch1.clientX;
+        const dy = touch2.clientY - touch1.clientY;
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+
     function updateTouchGridPos(touch) {
         const rect = mainArea.getBoundingClientRect();
         const worldX = (touch.clientX - rect.left - offsetX) / scale;
@@ -648,76 +692,152 @@
         closeTouchMenu();
         clearTimeout(longPressTimer);
         clearTimeout(menuDisplayTimer);
+        
         if (e.touches.length === 2) {
-            touchStartDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+            touchStartDist = getTouchDistance(e.touches[0], e.touches[1]);
             lastScale = scale;
+            isMovingItem = false;
+            touchItem = null;
         } else if (e.touches.length === 1) {
             const touch = e.touches[0];
             touchStartPos = { x: touch.clientX, y: touch.clientY };
             updateTouchGridPos(touch);
+            
             touchItem = placedItems.find(item => mouseGrid.x >= item.x && mouseGrid.x < item.x + item.w && mouseGrid.y >= item.y && mouseGrid.y < item.y + item.h);
+            touchStartTime = Date.now();
+            isMovingItem = false;
+            
             if (touchItem) {
+                // 0.5秒後: 移動準備
                 longPressTimer = setTimeout(() => {
-                    isMovingItem = true; draggingItem = touchItem;
+                    isMovingItem = true;
+                    draggingItem = touchItem;
                     dragStartPos = { x: touchItem.x, y: touchItem.y };
                     mainArea.classList.add('dragging-item');
                 }, 500);
+                
+                // 1.0秒後: メニュー表示（タイマー管理を整理）
                 menuDisplayTimer = setTimeout(() => {
                     showTouchMenu(touchItem, touchStartPos.x, touchStartPos.y);
-                    isMovingItem = false; draggingItem = null;
+                    isMovingItem = false;
+                    draggingItem = null;
+                    mainArea.classList.remove('dragging-item');
                 }, 1000);
-            } else if (!currentTool || currentTool.id === 'eraser') {
-                isDraggingMap = true; lastMousePos = { x: touch.clientX, y: touch.clientY };
+            } else if (!currentTool || currentTool.id === 'eraser' || currentTool.id === null) {
+                isDraggingMap = true;
+                lastMousePos = { x: touch.clientX, y: touch.clientY };
                 mainArea.classList.add('dragging-map');
             }
         }
     }, { passive: true });
 
     mainArea.addEventListener('touchmove', (e) => {
-        if (e.touches.length === 2) {
-            const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-            const newScale = Math.min(Math.max(0.30, lastScale * (dist / touchStartDist)), 1.5);
-            scale = newScale; updateStatus();
+        if (e.touches.length === 2 && touchStartDist > 0) {
+            const currentDist = getTouchDistance(e.touches[0], e.touches[1]);
+            const zoomRatio = currentDist / touchStartDist;
+            const newScale = Math.min(Math.max(0.30, lastScale * zoomRatio), 1.5);
+            
+            if (newScale !== scale) {
+                const rect = mainArea.getBoundingClientRect();
+                const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+                const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+                const mx = centerX - rect.left;
+                const my = centerY - rect.top;
+                
+                offsetX -= (mx - offsetX) * (newScale / scale - 1);
+                offsetY -= (my - offsetY) * (newScale / scale - 1);
+                scale = newScale;
+                updateStatus();
+            }
+            clearTimeout(menuDisplayTimer);
+            clearTimeout(longPressTimer);
         } else if (e.touches.length === 1) {
             const touch = e.touches[0];
+            const dist = Math.sqrt(Math.pow(touch.clientX - touchStartPos.x, 2) + Math.pow(touch.clientY - touchStartPos.y, 2));
+            
+            // 指示：遊びを30pxに
+            if (dist > 30) {
+                clearTimeout(menuDisplayTimer);
+            }
+
             updateTouchGridPos(touch);
+            
             if (isDraggingMap) {
-                offsetX += touch.clientX - lastMousePos.x; offsetY += touch.clientY - lastMousePos.y;
+                offsetX += touch.clientX - lastMousePos.x;
+                offsetY += touch.clientY - lastMousePos.y;
                 lastMousePos = { x: touch.clientX, y: touch.clientY };
             } else if (isMovingItem && draggingItem) {
                 draggingItem.x = Math.min(mapW - draggingItem.w, mouseGrid.x);
                 draggingItem.y = Math.min(mapH - draggingItem.h, mouseGrid.y);
             }
+            updateStatus();
         }
     }, { passive: true });
 
-    mainArea.addEventListener('touchend', () => {
-        clearTimeout(longPressTimer); clearTimeout(menuDisplayTimer);
+    mainArea.addEventListener('touchend', (e) => {
+        clearTimeout(longPressTimer);
+        clearTimeout(menuDisplayTimer);
+        touchStartDist = 0;
+        
         if (draggingItem && isMovingItem) {
-            if (isAreaOccupied(draggingItem.x, draggingItem.y, draggingItem.w, draggingItem.h, draggingItem)) {
-                draggingItem.x = dragStartPos.x; draggingItem.y = dragStartPos.y;
+            const px = Math.min(mapW - draggingItem.w, mouseGrid.x);
+            const py = Math.min(mapH - draggingItem.h, mouseGrid.y);
+            if (!isAreaOccupied(px, py, draggingItem.w, draggingItem.h, draggingItem)) {
+                draggingItem.x = px;
+                draggingItem.y = py;
+            } else {
+                draggingItem.x = dragStartPos.x;
+                draggingItem.y = dragStartPos.y;
             }
-            updateStats(); autoSave();
+            updateStats();
+            autoSave();
         }
-        isDraggingMap = false; isMovingItem = false; draggingItem = null;
+        
+        isDraggingMap = false;
+        isMovingItem = false;
+        draggingItem = null;
         mainArea.classList.remove('dragging-map', 'dragging-item');
     }, { passive: true });
 
     function showTouchMenu(item, x, y) {
         const menu = document.getElementById('touch-menu');
-        document.getElementById('touch-menu-item-name').innerText = item.name;
+        const menuName = document.getElementById('touch-menu-item-name');
+        if (!menu || !item) return;
+        menuName.innerText = item.name;
         menu.style.display = 'block';
-        menu.style.left = Math.max(10, Math.min(x - 80, window.innerWidth - 170)) + 'px';
-        menu.style.top = Math.max(10, Math.min(y - 110, window.innerHeight - 120)) + 'px';
+        const menuWidth = 160;
+        const menuHeight = 100;
+        let posX = x - (menuWidth / 2);
+        let posY = y - (menuHeight + 30);
+        
+        menu.style.left = Math.max(10, Math.min(posX, window.innerWidth - menuWidth - 10)) + 'px';
+        menu.style.top = Math.max(10, Math.min(posY, window.innerHeight - menuHeight - 10)) + 'px';
     }
 
-    function closeTouchMenu() { document.getElementById('touch-menu').style.display = 'none'; }
-    function deleteTouchItem() {
-        if (touchItem) { placedItems = placedItems.filter(i => i !== touchItem); updateStats(); autoSave(); closeTouchMenu(); }
+    function closeTouchMenu() {
+        document.getElementById('touch-menu').style.display = 'none';
     }
+
+    function deleteTouchItem() {
+        if (touchItem) {
+            placedItems = placedItems.filter(i => i !== touchItem);
+            updateStats();
+            autoSave();
+            closeTouchMenu();
+            touchItem = null;
+        }
+    }
+
+    document.addEventListener('click', (e) => {
+        const menu = document.getElementById('touch-menu');
+        if (menu && menu.style.display === 'block' && !menu.contains(e.target)) {
+            closeTouchMenu();
+        }
+    });
 
     function updateStatus() { 
-        document.getElementById('status').innerText = `座標: ${mouseGrid.x}, ${mouseGrid.y} | ズーム: ${Math.round(scale * 100)}%`; 
+        const statusEl = document.getElementById('status');
+        if(statusEl) statusEl.innerText = `座標: ${mouseGrid.x}, ${mouseGrid.y} | ズーム: ${Math.round(scale * 100)}%`; 
     }
     function autoSave() { localStorage.setItem('endfield_save', JSON.stringify(placedItems)); }
     function autoLoad() { 
@@ -726,27 +846,73 @@
     }
 
     function downloadImage() {
+        if (placedItems.length === 0) return showModal("設備がありません。", false);
         const expCanvas = document.getElementById('exportCanvas');
         const expCtx = expCanvas.getContext('2d');
         expCanvas.width = mapW * baseGridSize; expCanvas.height = mapH * baseGridSize;
-        expCtx.fillStyle = '#121416'; expCtx.fillRect(0, 0, expCanvas.width, expCanvas.height);
+        expCtx.fillStyle = getComputedStyle(document.body).getPropertyValue('--bg').trim();
+        expCtx.fillRect(0, 0, expCanvas.width, expCanvas.height);
+        expCtx.strokeStyle = getComputedStyle(document.body).getPropertyValue('--grid').trim();
+        expCtx.lineWidth = 1;
+        for(let i=0; i<=mapW; i++) { expCtx.beginPath(); expCtx.moveTo(i*baseGridSize, 0); expCtx.lineTo(i*baseGridSize, expCanvas.height); expCtx.stroke(); }
+        for(let j=0; j<=mapH; j++) { expCtx.beginPath(); expCtx.moveTo(0, j*baseGridSize); expCtx.lineTo(expCanvas.width, j*baseGridSize); expCtx.stroke(); }
         placedItems.forEach(item => { 
-            expCtx.fillStyle = item.color; expCtx.fillRect(item.x*baseGridSize+1, item.y*baseGridSize+1, item.w*baseGridSize-2, item.h*baseGridSize-2); 
+            expCtx.fillStyle = item.color; expCtx.globalAlpha = 0.9; 
+            expCtx.fillRect(item.x*baseGridSize+1, item.y*baseGridSize+1, item.w*baseGridSize-2, item.h*baseGridSize-2); 
+            expCtx.globalAlpha = 1.0;
             drawLabel(expCtx, item.name, (item.x + item.w/2)*baseGridSize, (item.y + item.h/2)*baseGridSize, item.w, item.h, item.angle || 0);
         });
-        const link = document.createElement('a'); link.download = 'endfield_plan.png'; link.href = expCanvas.toDataURL(); link.click();
+        const link = document.createElement('a'); link.download = `endfield_plan.png`; link.href = expCanvas.toDataURL('image/png'); link.click();
     }
     
     function exportData() {
         const code = btoa(unescape(encodeURIComponent(JSON.stringify(placedItems))));
-        document.getElementById('data-text').value = code;
+        const dataArea = document.getElementById('data-text');
+        if(dataArea) { dataArea.value = code; showModal('コードを書き出しました。コピーして保存してください。', false); }
+    }
+
+    async function loadConfig() {
+        try {
+            const response = await fetch('data.json?t=' + new Date().getTime());
+            const data = await response.json();
+            allBuildings = data.buildings || [];
+            const cats = [...new Set(allBuildings.map(b => b.category).filter(c => c))];
+            const catContainer = document.getElementById('category-filters');
+            cats.forEach(c => {
+                const btn = document.createElement('button');
+                btn.className = 'cat-btn';
+                btn.innerText = c;
+                btn.onclick = () => filterCategory(c);
+                catContainer.appendChild(btn);
+            });
+            changeMapRatio("40:40"); renderButtons(); autoLoad(); updateStats();
+            
+            // 初期の矢印設定を復元
+            const btn = document.getElementById('toggle-sidebar');
+            if (window.innerWidth <= 768) {
+                btn.innerText = '▲';
+            } else {
+                btn.innerText = '◀';
+            }
+            setTimeout(updateMobileSidebarHeight, 500);
+        } catch (err) { document.getElementById('buildings-container').innerHTML = "JSON読み込みエラー"; }
     }
 
     window.addEventListener('resize', () => {
-        centerMap(); updateMobileSidebarPosition();
+        centerMap();
+        updateMobileSidebarHeight();
+        // リサイズ時の矢印修正
+        const btn = document.getElementById('toggle-sidebar');
+        const isClosed = document.body.classList.contains('sidebar-closed');
+        if (window.innerWidth <= 768) {
+            btn.innerText = isClosed ? '▼' : '▲';
+        } else {
+            btn.innerText = isClosed ? '▶' : '◀';
+        }
     });
     
-    loadConfig(); draw();
+    loadConfig(); 
+    draw();
 </script>
 </body>
 </html>
