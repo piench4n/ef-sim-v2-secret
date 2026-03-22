@@ -327,6 +327,9 @@
     let selectedGroup = [];
     let bulkDragStart = { x: 0, y: 0 };
 
+    // 直前に使用していた操作モードを記憶 (move, bulk, eraser)
+    let lastActiveMode = 'move';
+
     function updateMobileSidebarHeight() {
         if (window.innerWidth <= 768) {
             const sidebar = document.getElementById('sidebar');
@@ -442,7 +445,10 @@
 
     function setTool(config) {
         if (currentTool && currentTool.id === config.id) {
-            setMoveMode();
+            // 再クリック時、最後に使用していたモードを復元
+            if (lastActiveMode === 'bulk') setBulkMoveMode();
+            else if (lastActiveMode === 'eraser') setEraser();
+            else setMoveMode();
             return;
         }
         currentTool = JSON.parse(JSON.stringify(config));
@@ -455,7 +461,9 @@
     }
 
     function setEraser() {
-        currentTool = { id: 'eraser' }; renderButtons();
+        currentTool = { id: 'eraser' }; 
+        lastActiveMode = 'eraser';
+        renderButtons();
         document.getElementById('btn-eraser').classList.add('active');
         document.getElementById('btn-move').classList.remove('active');
         document.getElementById('btn-bulk-move').classList.remove('active');
@@ -463,7 +471,9 @@
     }
 
     function setMoveMode() {
-        currentTool = null; renderButtons();
+        currentTool = null; 
+        lastActiveMode = 'move';
+        renderButtons();
         document.getElementById('btn-eraser').classList.remove('active');
         document.getElementById('btn-move').classList.add('active');
         document.getElementById('btn-bulk-move').classList.remove('active');
@@ -471,7 +481,9 @@
     }
 
     function setBulkMoveMode() {
-        currentTool = { id: 'bulk' }; renderButtons();
+        currentTool = { id: 'bulk' }; 
+        lastActiveMode = 'bulk';
+        renderButtons();
         document.getElementById('btn-eraser').classList.remove('active');
         document.getElementById('btn-move').classList.remove('active');
         document.getElementById('btn-bulk-move').classList.add('active');
@@ -592,7 +604,6 @@
             }
         });
 
-        // プレビュー表示（未選択の施設を単体でドラッグまたはツール選択時）
         if(activePreview && !selectedGroup.includes(activePreview)) {
             ctx.globalAlpha = 0.5;
             const occupied = isAreaOccupied(px, py, activePreview.w, activePreview.h, draggingItem);
@@ -639,9 +650,6 @@
                     if (!selectedGroup.includes(target)) {
                         selectedGroup.push(target);
                     } else {
-                        // トグル式：既に選択済みの状態で再クリックした場合は解除。
-                        // ただし、ドラッグ（移動）を阻害しないようmouseupで処理するのが一般的ですが、指示に沿ってトグルを実装。
-                        // 移動のみさせたい場合は、mouseupでドラッグ距離が0ならトグルさせる等の調整が必要な場合があります。
                         selectedGroup = selectedGroup.filter(i => i !== target);
                     }
                     draggingItem = target;
@@ -657,7 +665,7 @@
                 if (target) { placedItems = placedItems.filter(i => i !== target); updateStats(); autoSave(); }
             } else if (target) {
                 draggingItem = target; dragStartPos = { x: target.x, y: target.y }; mainArea.classList.add('dragging-item');
-            } else if (currentTool && currentTool.id !== 'eraser') {
+            } else if (currentTool && currentTool.id !== 'eraser' && currentTool.id !== 'bulk') {
                 const px = Math.min(mapW - currentTool.w, mouseGrid.x);
                 const py = Math.min(mapH - currentTool.h, mouseGrid.y);
                 if (!isAreaOccupied(px, py, currentTool.w, currentTool.h)) { 
@@ -724,7 +732,6 @@
                     });
                 }
             } else {
-                // 個別移動または未選択施設の一時移動
                 const px = Math.min(mapW - draggingItem.w, mouseGrid.x);
                 const py = Math.min(mapH - draggingItem.h, mouseGrid.y);
                 if (!isAreaOccupied(px, py, draggingItem.w, draggingItem.h, draggingItem)) { draggingItem.x = px; draggingItem.y = py; }
