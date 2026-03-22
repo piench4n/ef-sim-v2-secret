@@ -641,30 +641,31 @@
             isMovingItem = false;
             hasMoved = false;
             
-            // 0.5秒後: 施設移動開始
-            moveStartTimer = setTimeout(() => {
-                if (touchItem && !hasMoved) {
-                    isMovingItem = true;
-                    draggingItem = touchItem;
-                    dragStartPos = { x: touchItem.x, y: touchItem.y };
-                    mainArea.classList.add('dragging-item');
-                    // 移動開始したら削除タイマーをキャンセル
-                    clearTimeout(deleteMenuTimer);
-                }
-            }, 500);
-            
-            // 1秒後: 削除メニュー表示（移動していない場合のみ）
-            deleteMenuTimer = setTimeout(() => {
-                if (touchItem && !isMovingItem && !hasMoved) {
-                    showTouchMenu(touchItem, touchStartPos.x, touchStartPos.y);
-                }
-            }, 1000);
-            
-            if (!touchItem && (!currentTool || currentTool.id === 'eraser' || currentTool.id === null)) {
+            if (!touchItem || (!currentTool || currentTool.id === 'eraser' || currentTool.id === null)) {
                 // 施設がない場合はマップドラッグ
                 isDraggingMap = true;
                 lastMousePos = { x: touch.clientX, y: touch.clientY };
                 mainArea.classList.add('dragging-map');
+            } else {
+                // 施設がある場合のみタイマー開始
+                
+                // 0.5秒後: 施設移動開始
+                moveStartTimer = setTimeout(() => {
+                    if (touchItem && !hasMoved) {
+                        isMovingItem = true;
+                        draggingItem = touchItem;
+                        dragStartPos = { x: touchItem.x, y: touchItem.y };
+                        mainArea.classList.add('dragging-item');
+                        clearTimeout(deleteMenuTimer);
+                    }
+                }, 500);
+                
+                // 1秒後: 削除メニュー表示（移動していない場合のみ）
+                deleteMenuTimer = setTimeout(() => {
+                    if (touchItem && !isMovingItem && !hasMoved) {
+                        showTouchMenu(touchItem, touchStartPos.x, touchStartPos.y);
+                    }
+                }, 1000);
             }
         }
     }, { passive: true });
@@ -701,6 +702,7 @@
                     hasMoved = true;
                     clearTimeout(moveStartTimer);
                     clearTimeout(deleteMenuTimer);
+                    closeTouchMenu();
                 }
             }
             
