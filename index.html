@@ -199,19 +199,18 @@
         <strong>【PC操作】</strong><br>
         画面移動: ホイール押し込み | 設置/移動: 左クリック/ドラッグ | 削除: 右クリック | 単体回転: R キー | 全体回転: Ctrl+R | ズーム: ホイール<br>
         <strong>【スマホ操作】</strong><br>
-        画面移動: 1本指ドラッグ | 設置/移動: タップ後ドラッグ(2秒) | 削除: 長押し(4秒) | ズーム: 2本指ピンチ
+        画面移動: 1本指ドラッグ | 施設移動: 長押し(0.5秒) | 削除: 長押し(1.2秒) | ズーム: 2本指ピンチ
     </div>
 </div>
 
 <div id="main">
     <canvas id="gridCanvas"></canvas>
-    <div class="status-bar" id="status">座標: 0, 0 | ズーム: 25%</div>
+    <div class="status-bar" id="status">座標: 0, 0 | ズーム: 30%</div>
 </div>
 
 <div id="touch-menu">
     <strong id="touch-menu-item-name" style="display: block; margin-bottom: 10px;"></strong>
     <button onclick="deleteTouchItem()">削除</button>
-    <button onclick="closeTouchMenu()">キャンセル</button>
 </div>
 
 <div id="modal-overlay">
@@ -234,7 +233,7 @@
     
     let mapW = 40;
     let mapH = 40;
-    let scale = 0.25; 
+    let scale = 0.30; 
     let offsetX = 0;
     let offsetY = 0;
     let isDraggingMap = false;
@@ -249,7 +248,7 @@
 
     // タッチ関連変数
     let touchStartDist = 0;
-    let lastScale = 0.25;
+    let lastScale = 0.30;
     let touchItem = null;
     let touchStartTime = 0;
     let longPressTimer = null;
@@ -588,7 +587,7 @@
     mainArea.addEventListener('wheel', (e) => {
         e.preventDefault();
         const delta = e.deltaY > 0 ? -0.05 : 0.05;
-        const newScale = Math.min(Math.max(0.1, scale + delta), 1.5);
+        const newScale = Math.min(Math.max(0.3, scale + delta), 1.5);
         if (newScale !== scale) {
             const rect = mainArea.getBoundingClientRect();
             const mx = e.clientX - rect.left; const my = e.clientY - rect.top;
@@ -631,7 +630,7 @@
             touchStartTime = Date.now();
             isMovingItem = false;
             
-            // 2秒後: 施設移動開始
+            // 0.5秒後: 施設移動開始
             longPressTimer = setTimeout(() => {
                 if (touchItem) {
                     isMovingItem = true;
@@ -639,7 +638,7 @@
                     dragStartPos = { x: touchItem.x, y: touchItem.y };
                     mainArea.classList.add('dragging-item');
                 }
-            }, 2000);
+            }, 500);
             
             if (!touchItem && (!currentTool || currentTool.id === 'eraser' || currentTool.id === null)) {
                 // 施設がない場合はマップドラッグ
@@ -656,7 +655,7 @@
             e.preventDefault();
             const currentDist = getTouchDistance(e.touches[0], e.touches[1]);
             const zoomRatio = currentDist / touchStartDist;
-            const newScale = Math.min(Math.max(0.1, lastScale * zoomRatio), 1.5);
+            const newScale = Math.min(Math.max(0.3, lastScale * zoomRatio), 1.5);
             
             if (newScale !== scale) {
                 const rect = mainArea.getBoundingClientRect();
@@ -695,9 +694,9 @@
         clearTimeout(longPressTimer);
         touchStartDist = 0;
         
-        // 4秒長押しチェック（削除メニュー表示）
+        // 1.2秒長押しチェック（削除メニュー表示）
         const pressDuration = Date.now() - touchStartTime;
-        if (touchItem && pressDuration >= 4000 && !isMovingItem) {
+        if (touchItem && pressDuration >= 1200 && !isMovingItem) {
             showTouchMenu(touchItem, touchStartPos.x, touchStartPos.y);
         }
         
