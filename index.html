@@ -569,7 +569,6 @@
         for(let j=0; j<=mapH; j++) { ctx.beginPath(); ctx.moveTo(0, j*baseGridSize); ctx.lineTo(mapW*baseGridSize, j*baseGridSize); ctx.stroke(); }
         
         const isBulkMode = (currentTool && currentTool.id === 'bulk');
-        // 描画プレビュー判定。一括操作中は選択中の個体が draggingItem になる。
         const activePreview = draggingItem || (currentTool && currentTool.id !== 'eraser' && !isBulkMode ? currentTool : null);
         const px = (activePreview && !selectedGroup.includes(activePreview)) ? Math.min(mapW - activePreview.w, mouseGrid.x) : -100;
         const py = (activePreview && !selectedGroup.includes(activePreview)) ? Math.min(mapH - activePreview.h, mouseGrid.y) : -100;
@@ -592,17 +591,14 @@
                 drawLabel(ctx, item.name, (item.x + item.w/2)*baseGridSize, (item.y + item.h/2)*baseGridSize, item.w, item.h, item.angle || 0);
             }
             
-            // 既存設備が range を持ち、移動中(単体・一括両方)のアイテムがその内側に入った際に点線を表示
             if(item.range > 0 && !isDragging) {
                 let showRange = false;
                 if(draggingItem) {
-                    // グループ移動中の場合は全メンバーをチェック。単体ドラッグなら draggingItem のみ。
                     const targets = selectedGroup.includes(draggingItem) ? selectedGroup : [draggingItem];
                     targets.forEach(t => {
                         if (t.x < item.x + 0.5 + item.range && t.x + t.w > item.x + 0.5 - item.range && t.y < item.y + 0.5 + item.range && t.y + t.h > item.y + 0.5 - item.range) showRange = true;
                     });
                 } else if (currentTool && !isBulkMode) {
-                    // ツールから新規配置しようとしている時
                     if (px < item.x + 0.5 + item.range && px + currentTool.w > item.x + 0.5 - item.range && py < item.y + 0.5 + item.range && py + currentTool.h > item.y + 0.5 - item.range) showRange = true;
                 }
 
@@ -614,13 +610,11 @@
             }
         });
 
-        // 移動中アイテム自身の range 表示
         if (draggingItem && draggingItem.range > 0) {
             ctx.strokeStyle = '#ffcf00'; ctx.lineWidth = 2/scale; ctx.setLineDash([5/scale, 5/scale]);
             ctx.strokeRect((draggingItem.x-draggingItem.range+0.5)*baseGridSize, (draggingItem.y-draggingItem.range+0.5)*baseGridSize, (draggingItem.range*2)*baseGridSize, (draggingItem.range*2)*baseGridSize);
             ctx.setLineDash([]);
         } else if(currentTool && !isBulkMode && currentTool.range > 0) {
-            // 新規配置プレビューの range
             ctx.strokeStyle = '#ffcf00'; ctx.lineWidth = 2/scale; ctx.setLineDash([5/scale, 5/scale]);
             ctx.strokeRect((px-currentTool.range+0.5)*baseGridSize, (py-currentTool.range+0.5)*baseGridSize, (currentTool.range*2)*baseGridSize, (currentTool.range*2)*baseGridSize);
             ctx.setLineDash([]);
@@ -672,11 +666,18 @@
                     if (!selectedGroup.includes(target)) {
                         selectedGroup.push(target);
                     } else {
+                        // 既に選択済みの施設をクリックした場合、トグルで外す
+                        // ドラッグ（移動）のための初期化もここで行う
                         selectedGroup = selectedGroup.filter(i => i !== target);
                     }
+                    // 移動のための準備（トグルで外れた場合でもdraggingItemには設定し、移動を可能にする。
+                    // ただしトグルで外れた直後に移動させるのは不自然なため、トグルの処理を優先。
+                    // 修正：移動を優先させるため、クリックした個体は「起点」として保持。
                     draggingItem = target;
                     bulkDragStart = { x: mouseGrid.x, y: mouseGrid.y };
                     selectedGroup.forEach(item => item._origPos = { x: item.x, y: item.y });
+                    // 起点施設がグループ外（単体）の場合の初期位置も保存
+                    target._origPos = { x: target.x, y: target.y };
                 } else {
                     isSelecting = true;
                     selectionStart = { ...mouseGrid };
@@ -713,15 +714,16 @@
         if (isSelecting) {
             selectionEnd = { ...mouseGrid };
         } else if (draggingItem) {
-            if (currentTool && currentTool.id === 'bulk' && selectedGroup.includes(draggingItem)) {
+            if (currentTool && currentTool.id === 'bulk') {
                 const dx = mouseGrid.x - bulkDragStart.x;
                 const dy = mouseGrid.y - bulkDragStart.y;
-                selectedGroup.forEach(item => {
+                // グループの一部なら全員、そうでなければ起点施設のみ移動
+                const targets = selectedGroup.includes(draggingItem) ? selectedGroup : [draggingItem];
+                targets.forEach(item => {
                     item.x = item._origPos.x + dx;
                     item.y = item._origPos.y + dy;
                 });
-            } else if (!isBulkMode) {
-                // 通常個別移動
+            } else {
                 draggingItem.x = Math.min(mapW - draggingItem.w, mouseGrid.x);
                 draggingItem.y = Math.min(mapH - draggingItem.h, mouseGrid.y);
             }
@@ -740,12 +742,13 @@
         }
 
         if (draggingItem) {
-            if (currentTool && currentTool.id === 'bulk' && selectedGroup.includes(draggingItem)) {
+            if (currentTool && currentTool.id === 'bulk') {
+                const targets = selectedGroup.includes(draggingItem) ? selectedGroup : [draggingItem];
                 let canPlace = true;
-                selectedGroup.forEach(item => {
+                targets.forEach(item => {
                     if (item.x < 0 || item.y < 0 || item.x + item.w > mapW || item.y + item.h > mapH || isAreaOccupied(item.x, item.y, item.w, item.h, item)) canPlace = false;
                 });
-                if (!canPlace) selectedGroup.forEach(item => { item.x = item._origPos.x; item.y = item._origPos.y; });
+                if (!canPlace) targets.forEach(item => { item.x = item._origPos.x; item.y = item._origPos.y; });
             } else {
                 const px = Math.min(mapW - draggingItem.w, mouseGrid.x);
                 const py = Math.min(mapH - draggingItem.h, mouseGrid.y);
@@ -800,11 +803,16 @@
             
             if (currentTool && currentTool.id === 'bulk') {
                 if (touchItem) {
-                    if (!selectedGroup.includes(touchItem)) selectedGroup.push(touchItem);
-                    else selectedGroup = selectedGroup.filter(i => i !== touchItem);
-                    isMovingItem = true; draggingItem = touchItem;
+                    if (!selectedGroup.includes(touchItem)) {
+                        selectedGroup.push(touchItem);
+                    } else {
+                        selectedGroup = selectedGroup.filter(i => i !== touchItem);
+                    }
+                    isMovingItem = true;
+                    draggingItem = touchItem;
                     bulkDragStart = { ...mouseGrid };
                     selectedGroup.forEach(item => item._origPos = { x: item.x, y: item.y });
+                    touchItem._origPos = { x: touchItem.x, y: touchItem.y };
                 } else {
                     isSelecting = true; selectionStart = { ...mouseGrid }; selectionEnd = { ...mouseGrid }; selectedGroup = [];
                 }
@@ -847,11 +855,12 @@
             } else if (isDraggingMap) {
                 offsetX += touch.clientX - lastMousePos.x; offsetY += touch.clientY - lastMousePos.y; lastMousePos = { x: touch.clientX, y: touch.clientY };
             } else if (isMovingItem && draggingItem) {
-                if (currentTool && currentTool.id === 'bulk' && selectedGroup.includes(draggingItem)) {
+                if (currentTool && currentTool.id === 'bulk') {
                     const dx = mouseGrid.x - bulkDragStart.x;
                     const dy = mouseGrid.y - bulkDragStart.y;
-                    selectedGroup.forEach(item => { item.x = item._origPos.x + dx; item.y = item._origPos.y + dy; });
-                } else if (!isBulkMode) {
+                    const targets = selectedGroup.includes(draggingItem) ? selectedGroup : [draggingItem];
+                    targets.forEach(item => { item.x = item._origPos.x + dx; item.y = item._origPos.y + dy; });
+                } else if (!currentTool || currentTool.id !== 'bulk') {
                     draggingItem.x = Math.min(mapW - draggingItem.w, mouseGrid.x);
                     draggingItem.y = Math.min(mapH - draggingItem.h, mouseGrid.y);
                 }
@@ -869,12 +878,13 @@
             isSelecting = false;
         }
         if (draggingItem && isMovingItem) {
-            if (currentTool && currentTool.id === 'bulk' && selectedGroup.includes(draggingItem)) {
+            if (currentTool && currentTool.id === 'bulk') {
+                const targets = selectedGroup.includes(draggingItem) ? selectedGroup : [draggingItem];
                 let canPlace = true;
-                selectedGroup.forEach(item => {
+                targets.forEach(item => {
                     if (item.x < 0 || item.y < 0 || item.x + item.w > mapW || item.y + item.h > mapH || isAreaOccupied(item.x, item.y, item.w, item.h, item)) canPlace = false;
                 });
-                if (!canPlace) selectedGroup.forEach(item => { item.x = item._origPos.x; item.y = item._origPos.y; });
+                if (!canPlace) targets.forEach(item => { item.x = item._origPos.x; item.y = item._origPos.y; });
             } else {
                 const px = Math.min(mapW - draggingItem.w, mouseGrid.x); const py = Math.min(mapH - draggingItem.h, mouseGrid.y);
                 if (!isAreaOccupied(px, py, draggingItem.w, draggingItem.h, draggingItem)) { draggingItem.x = px; draggingItem.y = py; }
@@ -920,8 +930,8 @@
         const expCanvas = document.getElementById('exportCanvas');
         const expCtx = expCanvas.getContext('2d');
         expCanvas.width = mapW * baseGridSize; expCanvas.height = mapH * baseGridSize;
-        expCtx.fillStyle = varColor('--bg'); expCtx.fillRect(0, 0, expCanvas.width, expCanvas.height);
-        expCtx.strokeStyle = varColor('--grid'); expCtx.lineWidth = 1;
+        expCtx.fillStyle = getComputedStyle(document.body).getPropertyValue('--bg').trim(); expCtx.fillRect(0, 0, expCanvas.width, expCanvas.height);
+        expCtx.strokeStyle = getComputedStyle(document.body).getPropertyValue('--grid').trim(); expCtx.lineWidth = 1;
         for(let i=0; i<=mapW; i++) { expCtx.beginPath(); expCtx.moveTo(i*baseGridSize, 0); expCtx.lineTo(i*baseGridSize, expCanvas.height); expCtx.stroke(); }
         for(let j=0; j<=mapH; j++) { expCtx.beginPath(); expCtx.moveTo(0, j*baseGridSize); expCtx.lineTo(expCanvas.width, j*baseGridSize); expCtx.stroke(); }
         placedItems.forEach(item => { 
