@@ -727,8 +727,8 @@
             const currentDist = getTouchDistance(e.touches[0], e.touches[1]);
             const zoomRatio = currentDist / touchStartDist;
             
-            // 指示：スマホ版（画面幅768px以下）のみ最小縮尺を0.10、PC版を0.30に設定
-            const minS = (window.innerWidth <= 768) ? 0.10 : 0.30;
+            // 指示：スマホ版（画面幅768px以下）のみ最小縮尺を0.15、PC版を0.30に設定
+            const minS = (window.innerWidth <= 768) ? 0.15 : 0.30;
             const newScale = Math.min(Math.max(minS, lastScale * zoomRatio), 1.5);
 
             if (newScale !== scale) {
