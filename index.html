@@ -40,6 +40,7 @@
             flex-direction: column;
             z-index: 100;
             flex-shrink: 0;
+            overflow-y: auto;
         }
 
         #sidebar.closed {
@@ -47,20 +48,45 @@
             position: absolute;
         }
 
-        .sidebar-header {
-            padding: 20px;
-            font-weight: bold;
-            font-size: 1.1em;
+        .sidebar-section {
+            padding: 20px 15px;
             border-bottom: 1px solid var(--border-color);
-            background: rgba(0,0,0,0.2);
         }
 
-        #item-list {
-            flex-grow: 1;
-            overflow-y: auto;
-            padding: 15px;
+        .sidebar-section h3 {
+            margin: 0 0 15px 0;
+            font-size: 0.9em;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
 
+        /* マップサイズ選択ボタン */
+        .size-selector {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .size-btn {
+            background: #3f444a;
+            border: 1px solid transparent;
+            color: white;
+            padding: 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85em;
+            transition: 0.2s;
+        }
+
+        .size-btn:hover { background: #4f555c; }
+        .size-btn.active {
+            border-color: var(--accent-color);
+            background: rgba(255, 157, 0, 0.1);
+            color: var(--accent-color);
+        }
+
+        /* 設備アイテム */
         .sidebar-item {
             background: #3f444a;
             padding: 12px;
@@ -91,7 +117,6 @@
             background-color: #111;
         }
 
-        /* UIボタン (アイコン化) */
         .ui-btn {
             position: absolute;
             top: 15px;
@@ -112,14 +137,6 @@
             transition: left var(--transition-speed) cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        /* サイドバーが閉じている時、ボタンを左端へ */
-        #sidebar.closed + #stage-parent .ui-btn {
-            left: 15px;
-        }
-        /* サイドバーが開いている時、ボタンをサイドバーの右隣へ */
-        /* ※JSで制御するため、ここでは基本位置のみ */
-
-        /* ステータスバー (追従アニメーション) */
         #status-bar {
             position: absolute;
             bottom: 15px;
@@ -138,23 +155,29 @@
             transition: left var(--transition-speed) cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        #loading {
-            padding: 10px;
-            color: var(--accent-color);
-            text-align: center;
-        }
+        #loading { color: var(--accent-color); text-align: center; font-size: 0.8em; }
 
-        @media (max-width: 768px) {
-            :root { --sidebar-width: 220px; }
-        }
+        @media (max-width: 768px) { :root { --sidebar-width: 220px; } }
     </style>
 </head>
 <body>
 
 <nav id="sidebar">
-    <div class="sidebar-header">工業設備リスト</div>
-    <div id="item-list">
-        <div id="loading">GitHubからデータ取得中...</div>
+    <div class="sidebar-section">
+        <h3>マップサイズ</h3>
+        <div class="size-selector">
+            <button class="size-btn" onclick="changeMapSize(40)">40x40</button>
+            <button class="size-btn" onclick="changeMapSize(50)">50x50</button>
+            <button class="size-btn" onclick="changeMapSize(70)">70x70</button>
+            <button class="size-btn active" onclick="changeMapSize(80)">80x80</button>
+        </div>
+    </div>
+
+    <div class="sidebar-section">
+        <h3>設備一覧</h3>
+        <div id="item-list">
+            <div id="loading">データ取得中...</div>
+        </div>
     </div>
 </nav>
 
@@ -170,12 +193,10 @@
 </main>
 
 <script>
-    // --- 1. 定数・設定 ---
+    // --- 1. 定数・グローバル変数 ---
     const DATA_URL = 'https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/elements.json';
     const GRID_SIZE = 40; 
-    const MAP_BLOCKS = 100;
-    const MAP_WIDTH = GRID_SIZE * MAP_BLOCKS;
-    const MAP_HEIGHT = GRID_SIZE * MAP_BLOCKS;
+    let currentMapBlocks = 80; // デフォルトは80x80
     
     const MIN_SCALE = 0.3; 
     const MAX_SCALE = 1.5; 
@@ -187,19 +208,19 @@
     async function loadExternalData() {
         try {
             const response = await fetch(DATA_URL);
-            if (!response.ok) throw new Error('Network error');
+            if (!response.ok) throw new Error('Data Load Error');
             const data = await response.json();
             buildingMaster = data.buildings;
             renderSidebar();
         } catch (error) {
-            console.error('Data load failed:', error);
+            console.error(error);
             buildingMaster = [
                 { id: 'asmb_1', name: '加工機 T1', size: [3, 3], power: -50, color: '#4a9eff' },
                 { id: 'pole_1', name: '送電パイル', size: [1, 1], power: 0, color: '#ffeb3b' }
             ];
             renderSidebar();
             const ld = document.getElementById('loading');
-            if(ld) ld.innerHTML = '<small style="color:#888">GitHubデータ未設定</small>';
+            if(ld) ld.innerHTML = '<small style="color:#888">デモデータ読込済</small>';
         }
     }
 
@@ -207,6 +228,7 @@
         const itemList = document.getElementById('item-list');
         const loading = document.getElementById('loading');
         if(loading) loading.remove();
+        itemList.innerHTML = ''; // クリア
 
         buildingMaster.forEach(item => {
             const div = document.createElement('div');
@@ -221,7 +243,21 @@
         });
     }
 
-    // --- 3. Konva 初期化 ---
+    // --- 3. マップサイズ変更ロジック ---
+    function changeMapSize(size) {
+        currentMapBlocks = size;
+        
+        // ボタンの見た目を更新
+        document.querySelectorAll('.size-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.innerText === `${size}x${size}`);
+        });
+
+        // グリッドを再描画
+        drawGrid();
+        updateStatus();
+    }
+
+    // --- 4. Konva 初期化 ---
     const stage = new Konva.Stage({
         container: 'container',
         width: window.innerWidth,
@@ -232,30 +268,36 @@
     });
 
     const layer = new Konva.Layer();
+    const gridLayer = new Konva.Layer(); // グリッド専用レイヤー
+    stage.add(gridLayer);
     stage.add(layer);
 
     function drawGrid() {
+        gridLayer.destroyChildren(); // 古いグリッドを削除
+
+        const mapWidth = GRID_SIZE * currentMapBlocks;
+        const mapHeight = GRID_SIZE * currentMapBlocks;
+
         const bg = new Konva.Rect({
-            x: 0, y: 0,
-            width: MAP_WIDTH, height: MAP_HEIGHT,
-            fill: '#1a1c1e',
+            x: 0, y: 0, width: mapWidth, height: mapHeight, fill: '#1a1c1e',
         });
-        layer.add(bg);
+        gridLayer.add(bg);
 
         const lineColor = '#2a2a2a';
-        for (let i = 0; i <= MAP_BLOCKS; i++) {
-            layer.add(new Konva.Line({
-                points: [i * GRID_SIZE, 0, i * GRID_SIZE, MAP_HEIGHT],
+        for (let i = 0; i <= currentMapBlocks; i++) {
+            gridLayer.add(new Konva.Line({
+                points: [i * GRID_SIZE, 0, i * GRID_SIZE, mapHeight],
                 stroke: lineColor, strokeWidth: 1, listening: false
             }));
-            layer.add(new Konva.Line({
-                points: [0, i * GRID_SIZE, MAP_WIDTH, i * GRID_SIZE],
+            gridLayer.add(new Konva.Line({
+                points: [0, i * GRID_SIZE, mapWidth, i * GRID_SIZE],
                 stroke: lineColor, strokeWidth: 1, listening: false
             }));
         }
+        gridLayer.draw();
     }
 
-    // --- 4. 情報更新関数 ---
+    // --- 5. ステータス・操作 ---
     function updateStatus() {
         const scale = Math.round(stage.scaleX() * 100);
         const zoomEl = document.getElementById('val-zoom');
@@ -269,14 +311,16 @@
             };
             let gridX = Math.floor(mousePointTo.x / GRID_SIZE);
             let gridY = Math.floor(mousePointTo.y / GRID_SIZE);
-            gridX = Math.max(0, Math.min(MAP_BLOCKS, gridX));
-            gridY = Math.max(0, Math.min(MAP_BLOCKS, gridY));
+            
+            // 現在のマップサイズでクランプ
+            gridX = Math.max(0, Math.min(currentMapBlocks, gridX));
+            gridY = Math.max(0, Math.min(currentMapBlocks, gridY));
+            
             const posEl = document.getElementById('val-pos');
             if(posEl) posEl.innerText = `${gridX}, ${gridY}`;
         }
     }
 
-    // --- 5. 操作ロジック ---
     stage.on('wheel', (e) => {
         e.evt.preventDefault();
         const oldScale = stage.scaleX();
@@ -292,23 +336,7 @@
 
     stage.on('mousemove touchmove', updateStatus);
 
-    let lastDist = 0;
-    stage.on('touchmove', function (e) {
-        if (e.evt.touches.length === 2) {
-            const touch1 = e.evt.touches[0];
-            const touch2 = e.evt.touches[1];
-            const dist = Math.sqrt(Math.pow(touch2.clientX - touch1.clientX, 2) + Math.pow(touch2.clientY - touch1.clientY, 2));
-            if (!lastDist) { lastDist = dist; return; }
-            let newScale = stage.scaleX() * (dist / lastDist);
-            newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, newScale));
-            stage.scale({ x: newScale, y: newScale });
-            lastDist = dist;
-            updateStatus();
-        }
-    });
-    stage.on('touchend', () => { lastDist = 0; });
-
-    // --- 6. UI制御 (アニメーション同期) ---
+    // --- 6. UI制御 ---
     function toggleSidebar() {
         const sb = document.getElementById('sidebar');
         const btn = document.getElementById('toggle-icon');
@@ -317,22 +345,18 @@
 
         if (isClosed) {
             btn.innerText = "▶";
-            statusBar.style.left = "15px"; // 閉じている時は左端
+            statusBar.style.left = "15px";
         } else {
             btn.innerText = "◀";
-            // 開いている時はサイドバーの幅 + 余白
             const sidebarWidth = document.getElementById('sidebar').offsetWidth;
             statusBar.style.left = (sidebarWidth + 15) + "px";
         }
 
-        // アニメーション中のCanvasリサイズ対応
         let start = null;
         function animateStep(timestamp) {
             if (!start) start = timestamp;
             handleResize();
-            if (timestamp - start < 350) { // 遷移時間より少し長めに回す
-                requestAnimationFrame(animateStep);
-            }
+            if (timestamp - start < 350) requestAnimationFrame(animateStep);
         }
         requestAnimationFrame(animateStep);
     }
@@ -347,18 +371,14 @@
 
     window.addEventListener('resize', handleResize);
 
-    // 起動処理
+    // 起動
     drawGrid();
-    layer.draw();
     loadExternalData();
-    
-    // 初期のステータスバー位置設定
     setTimeout(() => {
         const sidebarWidth = document.getElementById('sidebar').offsetWidth;
         document.getElementById('status-bar').style.left = (sidebarWidth + 15) + "px";
         handleResize();
     }, 100);
-
     stage.position({ x: 20, y: 20 });
     updateStatus();
 </script>
