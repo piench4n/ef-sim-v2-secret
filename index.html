@@ -130,44 +130,69 @@
         }
         #touch-menu button:hover { background: var(--accent); color: #000; }
 
-        /* --- スマホ対応レイアウト (指示内容を反映) --- */
+        /* --- スマホ対応レイアウト (サイドバー全体を横スクロール & ボタン位置自動調整) --- */
         @media (max-width: 768px) {
             #sidebar { 
                 width: 100%; min-width: 100%; height: auto; border-right: none; 
                 border-bottom: 2px solid var(--accent);
-                position: fixed; top: 0; left: 0; padding: 10px; 
-                padding-top: 50px; /* ボタン領域の余白 */
-                
-                /* 修正：サイドバー全体を横スクロールさせる */
+                position: fixed; top: 0; left: 0; padding: 15px; 
+                padding-top: 15px; /* 上部の余白を調整 */
                 flex-direction: row; 
                 overflow-x: auto; 
-                overflow-y: hidden; 
+                overflow-y: hidden;
                 display: flex;
                 gap: 15px;
                 -webkit-overflow-scrolling: touch;
                 box-sizing: border-box;
                 max-height: none;
+                z-index: 100;
+                transition: transform 0.3s ease;
             }
             body.sidebar-closed #sidebar { 
                 margin-left: 0; transform: translateY(-100%); opacity: 0;
             }
             
+            /* 開閉ボタンをサイドバーの外側（下側）に配置し、開閉に連動させる */
             #toggle-sidebar { 
-                left: 10px !important; top: 10px !important; bottom: auto;
-                border-radius: 4px; padding: 8px 12px; background: var(--accent); color: #000;
+                left: 10px !important; 
+                top: auto !important;
+                bottom: auto !important;
+                /* サイドバーが開いている時はサイドバーの直下、閉じている時は最上部 */
+                margin-top: 0;
+                position: fixed;
+                top: 0px; 
+                z-index: 110;
+                border-radius: 0 0 4px 4px;
+                padding: 6px 15px;
+                background: var(--panel);
+                border: 1px solid var(--btn-border);
+                border-top: none;
+                color: var(--accent);
+                /* サイドバーの状態に合わせて位置を計算 */
+                transition: transform 0.3s ease;
             }
-            body.sidebar-closed #toggle-sidebar { top: 10px; }
 
-            /* 指示：サイドバー全体が横に並ぶようにする */
+            /* JSで制御されるクラスに応じてボタンの垂直位置をスライドさせる */
+            /* サイドバーが表示されている時はサイドバーの高さ分だけ下にずらす */
+            #toggle-sidebar {
+                /* サイドバー自体の高さ＋パディング等を考慮した位置へ自動移動 */
+                transform: translateY(calc(var(--mobile-sidebar-height, 0px)));
+            }
+
+            body.sidebar-closed #toggle-sidebar { 
+                transform: translateY(0); 
+            }
+
             .tool-group {
-                min-width: 250px; 
+                min-width: 260px; 
                 flex-shrink: 0; 
                 margin-bottom: 0;
+                display: flex;
+                flex-direction: column;
             }
 
-            /* 設備一覧（内部）は縦スクロール可能に戻す */
             #buildings-container {
-                max-height: 200px;
+                max-height: 180px;
                 overflow-y: auto;
                 display: block;
             }
@@ -279,7 +304,6 @@
     let allBuildings = [];
     let currentCategory = 'all';
 
-    // タッチ関連変数
     let touchStartDist = 0;
     let lastScale = 0.30;
     let touchItem = null;
@@ -288,6 +312,16 @@
     let menuDisplayTimer = null;
     let isMovingItem = false;
     let touchStartPos = { x: 0, y: 0 };
+
+    // スマホ用サイドバーの高さを計算してCSS変数にセットする関数
+    function updateMobileSidebarHeight() {
+        if (window.innerWidth <= 768) {
+            const sidebar = document.getElementById('sidebar');
+            // サイドバーの高さを取得（padding含む実寸）
+            const height = sidebar.offsetHeight;
+            document.documentElement.style.setProperty('--mobile-sidebar-height', height + 'px');
+        }
+    }
 
     function showModal(text, isConfirm, onOk) {
         const overlay = document.getElementById('modal-overlay');
@@ -336,8 +370,12 @@
     function toggleSidebar() {
         document.body.classList.toggle('sidebar-closed');
         const btn = document.getElementById('toggle-sidebar');
-        btn.innerText = document.body.classList.contains('sidebar-closed') ? '▶' : '◀';
-        setTimeout(centerMap, 310);
+        btn.innerText = document.body.classList.contains('sidebar-closed') ? '▼' : '▲';
+        // サイドバーの高さを再計算
+        setTimeout(() => {
+            updateMobileSidebarHeight();
+            centerMap();
+        }, 310);
     }
 
     function updateStats() {
@@ -364,6 +402,8 @@
             btn.classList.toggle('active', btn.innerText === btnLabel);
         });
         renderButtons();
+        // コンテンツ量が変わるので高さを更新
+        setTimeout(updateMobileSidebarHeight, 50);
     }
 
     async function loadConfig() {
@@ -381,6 +421,8 @@
                 catContainer.appendChild(btn);
             });
             changeMapRatio("40:40"); renderButtons(); autoLoad(); updateStats();
+            // 初期表示後に高さをセット
+            setTimeout(updateMobileSidebarHeight, 500);
         } catch (err) { document.getElementById('buildings-container').innerHTML = "JSON読み込みエラー"; }
     }
 
@@ -568,7 +610,7 @@
         return placedItems.some(item => (item !== ignoreItem) && (x < item.x + item.w && x + w > item.x && y < item.y + item.h && y + h > item.y));
     }
 
-    // --- マウスイベント（PC用） ---
+    // --- マウスイベント (PC用) ---
     mainArea.addEventListener('mousedown', (e) => {
         if (e.button === 1) { isDraggingMap = true; lastMousePos = { x: e.clientX, y: e.clientY }; mainArea.classList.add('dragging-map'); return; }
         if (e.button === 0) {
@@ -627,7 +669,6 @@
         }
     }, { passive: false });
 
-    // --- タッチイベント（スマホ用修正版） ---
     function getTouchDistance(touch1, touch2) {
         const dx = touch2.clientX - touch1.clientX;
         const dy = touch2.clientY - touch1.clientY;
@@ -662,7 +703,6 @@
             isMovingItem = false;
             
             if (touchItem) {
-                // 0.5秒後: 移動準備
                 longPressTimer = setTimeout(() => {
                     isMovingItem = true;
                     draggingItem = touchItem;
@@ -670,7 +710,6 @@
                     mainArea.classList.add('dragging-item');
                 }, 500);
                 
-                // 1.0秒後: メニュー表示（タイマー管理を整理）
                 menuDisplayTimer = setTimeout(() => {
                     showTouchMenu(touchItem, touchStartPos.x, touchStartPos.y);
                     isMovingItem = false;
@@ -697,7 +736,6 @@
                 const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
                 const mx = centerX - rect.left;
                 const my = centerY - rect.top;
-                
                 offsetX -= (mx - offsetX) * (newScale / scale - 1);
                 offsetY -= (my - offsetY) * (newScale / scale - 1);
                 scale = newScale;
@@ -707,8 +745,6 @@
             clearTimeout(longPressTimer);
         } else if (e.touches.length === 1) {
             const touch = e.touches[0];
-            
-            // 指示：遊びを30pxに
             const dist = Math.sqrt(Math.pow(touch.clientX - touchStartPos.x, 2) + Math.pow(touch.clientY - touchStartPos.y, 2));
             if (dist > 30) {
                 clearTimeout(menuDisplayTimer);
@@ -840,11 +876,18 @@
                 catContainer.appendChild(btn);
             });
             changeMapRatio("40:40"); renderButtons(); autoLoad(); updateStats();
+            // 初期化後に高さを計算
+            setTimeout(updateMobileSidebarHeight, 500);
         } catch (err) { document.getElementById('buildings-container').innerHTML = "JSON読み込みエラー"; }
     }
 
-    window.addEventListener('resize', centerMap);
-    loadConfig(); draw();
+    window.addEventListener('resize', () => {
+        centerMap();
+        updateMobileSidebarHeight();
+    });
+    
+    loadConfig(); 
+    draw();
 </script>
 </body>
 </html>
