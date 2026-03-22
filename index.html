@@ -915,17 +915,6 @@
             updateStatus();
         }
     }, { passive: false });
-
-    // ページ全体で右クリックメニューを禁止
-window.addEventListener('contextmenu', (e) => {
-    // マウス（右クリック）からの信号だった場合のみ、ブラウザ標準メニューを禁止
-    // pointerType が 'mouse' の時だけブロックします
-    if (e.pointerType === 'mouse') {
-        e.preventDefault(); 
-    }
-    // 指（touch）による長押しの場合は preventDefault を実行しないため、
-    // ブラウザが「長押しした」と判断し、自作の削除メニューが表示されるようになります
-});
     
     loadConfig(); draw();
 </script>
