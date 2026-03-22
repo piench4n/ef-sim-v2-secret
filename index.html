@@ -25,7 +25,7 @@
             color: var(--text-color);
             font-family: 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif;
             overflow: hidden;
-            touch-action: none; /* スマホのブラウザ標準ズームを無効化 */
+            touch-action: none;
         }
 
         /* サイドバー */
@@ -60,7 +60,6 @@
             padding: 15px;
         }
 
-        /* 設備アイテムカード */
         .sidebar-item {
             background: #3f444a;
             padding: 12px;
@@ -112,6 +111,24 @@
             box-shadow: 0 4px 10px rgba(0,0,0,0.3);
         }
 
+        /* ステータスバー（追加） */
+        #status-bar {
+            position: absolute;
+            bottom: 15px;
+            left: 15px;
+            z-index: 110;
+            background: rgba(0, 0, 0, 0.7);
+            color: #fff;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            pointer-events: none; /* クリックを透過させてマップ操作を邪魔しない */
+            border-left: 3px solid var(--accent-color);
+            display: flex;
+            gap: 15px;
+        }
+
         #loading {
             padding: 10px;
             color: var(--accent-color);
@@ -134,6 +151,12 @@
 
 <main id="stage-parent">
     <button class="ui-btn" onclick="toggleSidebar()">MENU</button>
+    
+    <div id="status-bar">
+        <div>ZOOM: <span id="val-zoom">100%</span></div>
+        <div>POS: <span id="val-pos">0, 0</span></div>
+    </div>
+
     <div id="container"></div>
 </main>
 
@@ -145,13 +168,12 @@
     const MAP_WIDTH = GRID_SIZE * MAP_BLOCKS;
     const MAP_HEIGHT = GRID_SIZE * MAP_BLOCKS;
     
-    // ズーム制限
-    const MIN_SCALE = 0.3; // 30%
-    const MAX_SCALE = 1.5; // 150%
+    const MIN_SCALE = 0.3; 
+    const MAX_SCALE = 1.5; 
 
     let buildingMaster = [];
 
-    // --- 2. データ読み込み (GitHub連携) ---
+    // --- 2. データ読み込み ---
     async function loadExternalData() {
         try {
             const response = await fetch(DATA_URL);
@@ -161,11 +183,9 @@
             renderSidebar();
         } catch (error) {
             console.error('Data load failed:', error);
-            // デモ用フォールバックデータ
             buildingMaster = [
                 { id: 'asmb_1', name: '加工機 T1', size: [3, 3], power: -50, color: '#4a9eff' },
-                { id: 'pole_1', name: '送電パイル', size: [1, 1], power: 0, color: '#ffeb3b' },
-                { id: 'solar_1', name: 'ソーラーパネル', size: [4, 4], power: 100, color: '#4caf50' }
+                { id: 'pole_1', name: '送電パイル', size: [1, 1], power: 0, color: '#ffeb3b' }
             ];
             renderSidebar();
             const ld = document.getElementById('loading');
@@ -191,7 +211,7 @@
         });
     }
 
-    // --- 3. 描画エンジン (Konva) 初期化 ---
+    // --- 3. Konva 初期化 ---
     const stage = new Konva.Stage({
         container: 'container',
         width: window.innerWidth,
@@ -203,7 +223,6 @@
     stage.add(layer);
 
     function drawGrid() {
-        // マップ背景
         const bg = new Konva.Rect({
             x: 0, y: 0,
             width: MAP_WIDTH, height: MAP_HEIGHT,
@@ -211,83 +230,83 @@
         });
         layer.add(bg);
 
-        // すべて同じ太さのグリッド線
         const lineColor = '#2a2a2a';
         for (let i = 0; i <= MAP_BLOCKS; i++) {
-            // 垂直
             layer.add(new Konva.Line({
                 points: [i * GRID_SIZE, 0, i * GRID_SIZE, MAP_HEIGHT],
-                stroke: lineColor,
-                strokeWidth: 1,
-                listening: false
+                stroke: lineColor, strokeWidth: 1, listening: false
             }));
-            // 水平
             layer.add(new Konva.Line({
                 points: [0, i * GRID_SIZE, MAP_WIDTH, i * GRID_SIZE],
-                stroke: lineColor,
-                strokeWidth: 1,
-                listening: false
+                stroke: lineColor, strokeWidth: 1, listening: false
             }));
         }
     }
 
-    // --- 4. ズーム & 操作ロジック ---
-    function handleWheel(e) {
+    // --- 4. 座標・ズーム情報の更新関数 ---
+    function updateStatus() {
+        // ズーム倍率の更新
+        const scale = Math.round(stage.scaleX() * 100);
+        document.getElementById('val-zoom').innerText = scale + '%';
+
+        // マウス/タッチ座標からマス目(0-99)を計算
+        const pointer = stage.getPointerPosition();
+        if (pointer) {
+            const mousePointTo = {
+                x: (pointer.x - stage.x()) / stage.scaleX(),
+                y: (pointer.y - stage.y()) / stage.scaleX(),
+            };
+            const gridX = Math.floor(mousePointTo.x / GRID_SIZE);
+            const gridY = Math.floor(mousePointTo.y / GRID_SIZE);
+
+            // マップの範囲内のみ表示
+            if (gridX >= 0 && gridX < MAP_BLOCKS && gridY >= 0 && gridY < MAP_BLOCKS) {
+                document.getElementById('val-pos').innerText = `${gridX}, ${gridY}`;
+            } else {
+                document.getElementById('val-pos').innerText = `OUT`;
+            }
+        }
+    }
+
+    // --- 5. 操作ロジック ---
+    stage.on('wheel', (e) => {
         e.evt.preventDefault();
         const oldScale = stage.scaleX();
         const pointer = stage.getPointerPosition();
-
-        const mousePointTo = {
-            x: (pointer.x - stage.x()) / oldScale,
-            y: (pointer.y - stage.y()) / oldScale,
-        };
-
+        const mousePointTo = { x: (pointer.x - stage.x()) / oldScale, y: (pointer.y - stage.y()) / oldScale };
+        
         let newScale = e.evt.deltaY > 0 ? oldScale / 1.1 : oldScale * 1.1;
-
-        // 倍率制限適用
         if (newScale < MIN_SCALE) newScale = MIN_SCALE;
         if (newScale > MAX_SCALE) newScale = MAX_SCALE;
 
         stage.scale({ x: newScale, y: newScale });
+        stage.position({ x: pointer.x - mousePointTo.x * newScale, y: pointer.y - mousePointTo.y * newScale });
+        
+        updateStatus();
+    });
 
-        const newPos = {
-            x: pointer.x - mousePointTo.x * newScale,
-            y: pointer.y - mousePointTo.y * newScale,
-        };
-        stage.position(newPos);
-        layer.batchDraw();
-    }
+    // マウスが動くたびに座標を更新
+    stage.on('mousemove touchmove', updateStatus);
 
-    stage.on('wheel', handleWheel);
-
-    // スマホ用ピンチズーム対応 (簡易)
-    let lastCenter = null;
+    // スマホ用ピンチ
     let lastDist = 0;
     stage.on('touchmove', function (e) {
         if (e.evt.touches.length === 2) {
             const touch1 = e.evt.touches[0];
             const touch2 = e.evt.touches[1];
             const dist = Math.sqrt(Math.pow(touch2.clientX - touch1.clientX, 2) + Math.pow(touch2.clientY - touch1.clientY, 2));
-
-            if (!lastDist) {
-                lastDist = dist;
-                return;
-            }
-
-            const oldScale = stage.scaleX();
-            let newScale = oldScale * (dist / lastDist);
-
+            if (!lastDist) { lastDist = dist; return; }
+            let newScale = stage.scaleX() * (dist / lastDist);
             if (newScale < MIN_SCALE) newScale = MIN_SCALE;
             if (newScale > MAX_SCALE) newScale = MAX_SCALE;
-
             stage.scale({ x: newScale, y: newScale });
             lastDist = dist;
-            layer.batchDraw();
+            updateStatus();
         }
     });
     stage.on('touchend', () => { lastDist = 0; });
 
-    // --- 5. UI制御 ---
+    // --- 6. UI制御 ---
     function toggleSidebar() {
         const sb = document.getElementById('sidebar');
         sb.classList.toggle('closed');
@@ -298,17 +317,15 @@
         const container = document.getElementById('stage-parent');
         stage.width(container.offsetWidth);
         stage.height(container.offsetHeight);
-        layer.batchDraw();
+        updateStatus();
     }
 
     window.addEventListener('resize', handleResize);
 
-    // 起動
     drawGrid();
     layer.draw();
     loadExternalData();
-    handleResize(); // 初期サイズ調整
-
+    handleResize();
 </script>
 </body>
 </html>
