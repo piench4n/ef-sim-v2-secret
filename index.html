@@ -26,7 +26,7 @@
         #sidebar { 
             width: var(--sidebar-w); min-width: var(--sidebar-w); background: var(--panel); border-right: 2px solid rgba(128,128,128,0.2); padding: 20px; 
             display: flex; flex-direction: column; gap: 12px; overflow-y: auto; z-index: 100;
-            transition: margin-left 0.3s ease, opacity 0.3s ease, transform 0.3s ease;
+            transition: margin-left 0.3s ease, opacity 0.3s ease;
             -ms-overflow-style: none; scrollbar-width: none; box-sizing: border-box;
         }
         #sidebar::-webkit-scrollbar { display: none; }
@@ -36,7 +36,7 @@
             position: fixed; left: var(--sidebar-w); top: 10px; z-index: 110;
             background: var(--panel); border: 1px solid rgba(128,128,128,0.3); color: var(--accent);
             padding: 8px 12px; cursor: pointer; border-radius: 0 4px 4px 0;
-            transition: left 0.3s ease, top 0.3s ease; font-weight: bold;
+            transition: left 0.3s ease; font-weight: bold;
         }
         body.sidebar-closed #toggle-sidebar { left: 0; }
 
@@ -157,6 +157,8 @@
             }
             
             h2, .controls-hint, .warning-text { display: none; }
+            .tool-group { padding: 8px; margin-bottom: 5px; }
+
             #main { width: 100%; height: 100vh; }
             .status-bar { left: 10px; bottom: 10px; }
             body.sidebar-closed .status-bar { left: 10px; }
@@ -215,7 +217,7 @@
         <strong>【PC操作】</strong><br>
         画面移動: ホイール押し込み | 設置/移動: 左クリック/ドラッグ | 削除: 右クリック | 単体回転: R キー | 全体回転: Ctrl+R | ズーム: ホイール<br>
         <strong>【スマホ操作】</strong><br>
-        画面移動: 1本指ドラッグ | 設置/移動: タップ後ドラッグ(0.5秒) | 削除: 長押し(1秒) | ズーム: 2本指ピンチ
+        画面移動: 1本指ドラッグ | 設置/移動: タップ後ドラッグ(0.5秒) | 削除: 長押し(1秒) | ズーム: 2本指ピン指
     </div>
 </div>
 
@@ -803,6 +805,24 @@
         const code = btoa(unescape(encodeURIComponent(JSON.stringify(placedItems))));
         const dataArea = document.getElementById('data-text');
         if(dataArea) { dataArea.value = code; showModal('コードを書き出しました。コピーして保存してください。', false); }
+    }
+
+    async function loadConfig() {
+        try {
+            const response = await fetch('data.json?t=' + new Date().getTime());
+            const data = await response.json();
+            allBuildings = data.buildings || [];
+            const cats = [...new Set(allBuildings.map(b => b.category).filter(c => c))];
+            const catContainer = document.getElementById('category-filters');
+            cats.forEach(c => {
+                const btn = document.createElement('button');
+                btn.className = 'cat-btn';
+                btn.innerText = c;
+                btn.onclick = () => filterCategory(c);
+                catContainer.appendChild(btn);
+            });
+            changeMapRatio("40:40"); renderButtons(); autoLoad(); updateStats();
+        } catch (err) { document.getElementById('buildings-container').innerHTML = "JSON読み込みエラー"; }
     }
 
     window.addEventListener('resize', centerMap);
