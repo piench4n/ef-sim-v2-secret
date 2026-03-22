@@ -82,11 +82,6 @@
             margin-bottom: 4px;
         }
 
-        .sidebar-item small {
-            color: #bbb;
-            font-size: 0.8em;
-        }
-
         /* マップ表示エリア */
         #stage-parent {
             flex-grow: 1;
@@ -111,7 +106,7 @@
             box-shadow: 0 4px 10px rgba(0,0,0,0.3);
         }
 
-        /* ステータスバー（追加） */
+        /* ステータスバー (日本語化・順序変更) */
         #status-bar {
             position: absolute;
             bottom: 15px;
@@ -123,7 +118,7 @@
             border-radius: 4px;
             font-family: monospace;
             font-size: 12px;
-            pointer-events: none; /* クリックを透過させてマップ操作を邪魔しない */
+            pointer-events: none;
             border-left: 3px solid var(--accent-color);
             display: flex;
             gap: 15px;
@@ -150,11 +145,11 @@
 </nav>
 
 <main id="stage-parent">
-    <button class="ui-btn" onclick="toggleSidebar()">MENU</button>
+    <button class="ui-btn" onclick="toggleSidebar()">メニュー</button>
     
     <div id="status-bar">
-        <div>ZOOM: <span id="val-zoom">100%</span></div>
-        <div>POS: <span id="val-pos">0, 0</span></div>
+        <div>座標: <span id="val-pos">0, 0</span></div>
+        <div>ズーム: <span id="val-zoom">30%</span></div>
     </div>
 
     <div id="container"></div>
@@ -170,6 +165,7 @@
     
     const MIN_SCALE = 0.3; 
     const MAX_SCALE = 1.5; 
+    const ZOOM_STEP = 0.05; 
 
     let buildingMaster = [];
 
@@ -217,6 +213,8 @@
         width: window.innerWidth,
         height: window.innerHeight,
         draggable: true,
+        scaleX: MIN_SCALE,
+        scaleY: MIN_SCALE
     });
 
     const layer = new Konva.Layer();
@@ -243,13 +241,11 @@
         }
     }
 
-    // --- 4. 座標・ズーム情報の更新関数 ---
+    // --- 4. 情報更新関数 ---
     function updateStatus() {
-        // ズーム倍率の更新
         const scale = Math.round(stage.scaleX() * 100);
         document.getElementById('val-zoom').innerText = scale + '%';
 
-        // マウス/タッチ座標からマス目(0-99)を計算
         const pointer = stage.getPointerPosition();
         if (pointer) {
             const mousePointTo = {
@@ -259,11 +255,10 @@
             const gridX = Math.floor(mousePointTo.x / GRID_SIZE);
             const gridY = Math.floor(mousePointTo.y / GRID_SIZE);
 
-            // マップの範囲内のみ表示
-            if (gridX >= 0 && gridX < MAP_BLOCKS && gridY >= 0 && gridY < MAP_BLOCKS) {
+            if (gridX >= 0 && gridX <= MAP_BLOCKS && gridY >= 0 && gridY <= MAP_BLOCKS) {
                 document.getElementById('val-pos').innerText = `${gridX}, ${gridY}`;
             } else {
-                document.getElementById('val-pos').innerText = `OUT`;
+                document.getElementById('val-pos').innerText = `エリア外`;
             }
         }
     }
@@ -275,9 +270,8 @@
         const pointer = stage.getPointerPosition();
         const mousePointTo = { x: (pointer.x - stage.x()) / oldScale, y: (pointer.y - stage.y()) / oldScale };
         
-        let newScale = e.evt.deltaY > 0 ? oldScale / 1.1 : oldScale * 1.1;
-        if (newScale < MIN_SCALE) newScale = MIN_SCALE;
-        if (newScale > MAX_SCALE) newScale = MAX_SCALE;
+        let newScale = e.evt.deltaY > 0 ? oldScale - ZOOM_STEP : oldScale + ZOOM_STEP;
+        newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, newScale));
 
         stage.scale({ x: newScale, y: newScale });
         stage.position({ x: pointer.x - mousePointTo.x * newScale, y: pointer.y - mousePointTo.y * newScale });
@@ -285,10 +279,8 @@
         updateStatus();
     });
 
-    // マウスが動くたびに座標を更新
     stage.on('mousemove touchmove', updateStatus);
 
-    // スマホ用ピンチ
     let lastDist = 0;
     stage.on('touchmove', function (e) {
         if (e.evt.touches.length === 2) {
@@ -297,8 +289,7 @@
             const dist = Math.sqrt(Math.pow(touch2.clientX - touch1.clientX, 2) + Math.pow(touch2.clientY - touch1.clientY, 2));
             if (!lastDist) { lastDist = dist; return; }
             let newScale = stage.scaleX() * (dist / lastDist);
-            if (newScale < MIN_SCALE) newScale = MIN_SCALE;
-            if (newScale > MAX_SCALE) newScale = MAX_SCALE;
+            newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, newScale));
             stage.scale({ x: newScale, y: newScale });
             lastDist = dist;
             updateStatus();
@@ -315,6 +306,7 @@
 
     function handleResize() {
         const container = document.getElementById('stage-parent');
+        if (!container) return;
         stage.width(container.offsetWidth);
         stage.height(container.offsetHeight);
         updateStatus();
@@ -326,6 +318,10 @@
     layer.draw();
     loadExternalData();
     handleResize();
+    
+    // 初期配置を少し見やすく調整
+    stage.position({ x: 20, y: 20 });
+    updateStatus();
 </script>
 </body>
 </html>
