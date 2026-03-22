@@ -199,7 +199,7 @@
         <strong>【PC操作】</strong><br>
         画面移動: ホイール押し込み | 設置/移動: 左クリック/ドラッグ | 削除: 右クリック | 単体回転: R キー | 全体回転: Ctrl+R | ズーム: ホイール<br>
         <strong>【スマホ操作】</strong><br>
-        画面移動: 1本指ドラッグ | 設置/移動: タップ/ドラッグ | 削除: 長押し | ズーム: 2本指ピンチ
+        画面移動: 1本指ドラッグ | 設置/移動: タップ後ドラッグ(2秒) | 削除: 長押し(4秒) | ズーム: 2本指ピンチ
     </div>
 </div>
 
@@ -253,6 +253,8 @@
     let touchItem = null;
     let touchStartTime = 0;
     let longPressTimer = null;
+    let isMovingItem = false;
+    let touchStartPos = { x: 0, y: 0 };
 
     function showModal(text, isConfirm, onOk) {
         const overlay = document.getElementById('modal-overlay');
@@ -603,6 +605,14 @@
         return Math.sqrt(dx * dx + dy * dy);
     }
 
+    function updateTouchGridPos(touch) {
+        const rect = mainArea.getBoundingClientRect();
+        const worldX = (touch.clientX - rect.left - offsetX) / scale;
+        const worldY = (touch.clientY - rect.top - offsetY) / scale;
+        mouseGrid.x = Math.max(0, Math.min(mapW, Math.floor(worldX / baseGridSize)));
+        mouseGrid.y = Math.max(0, Math.min(mapH, Math.floor(worldY / baseGridSize)));
+    }
+
     mainArea.addEventListener('touchstart', (e) => {
         closeTouchMenu();
         
@@ -610,31 +620,28 @@
             // ピンチズーム開始
             touchStartDist = getTouchDistance(e.touches[0], e.touches[1]);
             lastScale = scale;
+            isMovingItem = false;
         } else if (e.touches.length === 1) {
             // 1本指タッチ開始
             const touch = e.touches[0];
-            const rect = mainArea.getBoundingClientRect();
-            const worldX = (touch.clientX - rect.left - offsetX) / scale;
-            const worldY = (touch.clientY - rect.top - offsetY) / scale;
-            mouseGrid.x = Math.max(0, Math.min(mapW, Math.floor(worldX / baseGridSize)));
-            mouseGrid.y = Math.max(0, Math.min(mapH, Math.floor(worldY / baseGridSize)));
+            touchStartPos = { x: touch.clientX, y: touch.clientY };
+            updateTouchGridPos(touch);
             
             touchItem = placedItems.find(item => mouseGrid.x >= item.x && mouseGrid.x < item.x + item.w && mouseGrid.y >= item.y && mouseGrid.y < item.y + item.h);
             touchStartTime = Date.now();
+            isMovingItem = false;
             
-            // 長押し検出開始（2秒）
+            // 2秒後: 施設移動開始
             longPressTimer = setTimeout(() => {
                 if (touchItem) {
-                    showTouchMenu(touchItem, touch.clientX, touch.clientY);
+                    isMovingItem = true;
+                    draggingItem = touchItem;
+                    dragStartPos = { x: touchItem.x, y: touchItem.y };
+                    mainArea.classList.add('dragging-item');
                 }
             }, 2000);
             
-            if (touchItem && currentTool && currentTool.id !== 'eraser') {
-                // 施設がある場合は移動開始
-                draggingItem = touchItem;
-                dragStartPos = { x: touchItem.x, y: touchItem.y };
-                mainArea.classList.add('dragging-item');
-            } else if (!touchItem && (!currentTool || currentTool.id === 'eraser' || currentTool.id === null)) {
+            if (!touchItem && (!currentTool || currentTool.id === 'eraser' || currentTool.id === null)) {
                 // 施設がない場合はマップドラッグ
                 isDraggingMap = true;
                 lastMousePos = { x: touch.clientX, y: touch.clientY };
@@ -666,16 +673,18 @@
         } else if (e.touches.length === 1) {
             // 1本指ドラッグ
             const touch = e.touches[0];
-            const rect = mainArea.getBoundingClientRect();
-            const worldX = (touch.clientX - rect.left - offsetX) / scale;
-            const worldY = (touch.clientY - rect.top - offsetY) / scale;
-            mouseGrid.x = Math.max(0, Math.min(mapW, Math.floor(worldX / baseGridSize)));
-            mouseGrid.y = Math.max(0, Math.min(mapH, Math.floor(worldY / baseGridSize)));
+            updateTouchGridPos(touch);
             
             if (isDraggingMap) {
                 offsetX += touch.clientX - lastMousePos.x;
                 offsetY += touch.clientY - lastMousePos.y;
                 lastMousePos = { x: touch.clientX, y: touch.clientY };
+            } else if (isMovingItem && draggingItem) {
+                // 施設を移動中
+                const px = Math.min(mapW - draggingItem.w, mouseGrid.x);
+                const py = Math.min(mapH - draggingItem.h, mouseGrid.y);
+                draggingItem.x = px;
+                draggingItem.y = py;
             }
             
             updateStatus();
@@ -686,7 +695,14 @@
         clearTimeout(longPressTimer);
         touchStartDist = 0;
         
-        if (draggingItem) {
+        // 4秒長押しチェック（削除メニュー表示）
+        const pressDuration = Date.now() - touchStartTime;
+        if (touchItem && pressDuration >= 4000 && !isMovingItem) {
+            showTouchMenu(touchItem, touchStartPos.x, touchStartPos.y);
+        }
+        
+        if (draggingItem && isMovingItem) {
+            // 施設移動終了
             const px = Math.min(mapW - draggingItem.w, mouseGrid.x);
             const py = Math.min(mapH - draggingItem.h, mouseGrid.y);
             if (!isAreaOccupied(px, py, draggingItem.w, draggingItem.h, draggingItem)) {
@@ -696,12 +712,13 @@
                 draggingItem.x = dragStartPos.x;
                 draggingItem.y = dragStartPos.y;
             }
-            draggingItem = null;
             updateStats();
             autoSave();
         }
         
         isDraggingMap = false;
+        isMovingItem = false;
+        draggingItem = null;
         touchItem = null;
         mainArea.classList.remove('dragging-map', 'dragging-item');
     }, { passive: true });
@@ -726,6 +743,7 @@
             updateStats();
             autoSave();
             closeTouchMenu();
+            touchItem = null;
         }
     }
 
