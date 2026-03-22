@@ -130,7 +130,7 @@
         }
         #touch-menu button:hover { background: var(--accent); color: #000; }
 
-        /* PC版用のコンテナスタイル（デフォルトは何もしない） */
+        /* PC版用のコンテナスタイル */
         .mobile-v-stack { display: contents; }
 
         /* --- スマホ対応レイアウト --- */
@@ -183,7 +183,6 @@
                 flex-direction: column;
             }
 
-            /* スマホ版のみ「基本操作」と「マップ設定」を縦に並べる */
             .mobile-v-stack {
                 display: flex;
                 flex-direction: column;
@@ -197,7 +196,14 @@
                 display: block;
             }
 
-            h2, .controls-hint, .warning-text { display: none; }
+            /* 注意書きを表示するため .warning-text を除外 */
+            h2, .controls-hint { display: none; }
+            
+            .warning-text {
+                white-space: normal;
+                min-width: 240px;
+            }
+
             #main { width: 100%; height: 100vh; }
             .status-bar { left: 10px; bottom: 10px; }
             body.sidebar-closed .status-bar { left: 10px; }
@@ -374,7 +380,6 @@
         const btn = document.getElementById('toggle-sidebar');
         const isClosed = document.body.classList.contains('sidebar-closed');
         
-        // 指示：PCとスマホで矢印を使い分ける
         if (window.innerWidth <= 768) {
             btn.innerText = isClosed ? '▼' : '▲';
         } else {
@@ -411,7 +416,6 @@
             btn.classList.toggle('active', btn.innerText === btnLabel);
         });
         renderButtons();
-        // コンテンツ量変化に伴い高さを更新
         setTimeout(updateMobileSidebarHeight, 50);
     }
 
@@ -431,7 +435,6 @@
             });
             changeMapRatio("40:40"); renderButtons(); autoLoad(); updateStats();
             
-            // 初期の矢印設定を復元
             const btn = document.getElementById('toggle-sidebar');
             if (window.innerWidth <= 768) {
                 btn.innerText = '▲';
@@ -519,17 +522,14 @@
         const pxW = itemW * baseGridSize;
         const pxH = itemH * baseGridSize;
         const padding = 2;
-        
         context.save();
         context.translate(x, y);
         context.rotate(angle * Math.PI / 2);
-        
         context.strokeStyle = "rgba(0, 0, 0, 0.8)";
         context.lineWidth = 2;
         context.lineJoin = "round";
         const triSize = Math.min(7, pxW/3.5);
         const topY = -pxH/2 + 2;
-        
         const drawTri = () => {
             context.beginPath();
             context.moveTo(0, topY);
@@ -537,21 +537,17 @@
             context.lineTo(triSize, topY + triSize * 1.2);
             context.closePath();
         };
-
         drawTri();
         context.stroke();
         context.fillStyle = "#ffcf00";
         context.fill();
         context.restore();
-
         let fontSize = (itemW === 1 || itemH === 1) ? 11 : 13;
         context.font = `bold ${fontSize}px sans-serif`;
         context.textAlign = "center";
         context.textBaseline = "middle";
-        
         const maxAvailableW = pxW - 4;
         let displayName = text;
-
         if (context.measureText(displayName).width > maxAvailableW) {
             let shortName = text[0] + "...";
             if (context.measureText(shortName).width <= maxAvailableW) {
@@ -563,7 +559,6 @@
                 }
             } else displayName = text[0];
         }
-        
         context.fillStyle = "rgba(0, 0, 0, 0.85)";
         context.fillText(displayName, x + 0.5, y + 0.5);
         context.fillStyle = "#fff";
@@ -577,14 +572,11 @@
         ctx.scale(scale, scale);
         ctx.strokeStyle = getComputedStyle(document.body).getPropertyValue('--grid').trim();
         ctx.lineWidth = 1/scale;
-        
         for(let i=0; i<=mapW; i++) { ctx.beginPath(); ctx.moveTo(i*baseGridSize, 0); ctx.lineTo(i*baseGridSize, mapH*baseGridSize); ctx.stroke(); }
         for(let j=0; j<=mapH; j++) { ctx.beginPath(); ctx.moveTo(0, j*baseGridSize); ctx.lineTo(mapW*baseGridSize, j*baseGridSize); ctx.stroke(); }
-
         const activePreview = draggingItem || (currentTool && currentTool.id !== 'eraser' ? currentTool : null);
         const px = activePreview ? Math.min(mapW - activePreview.w, mouseGrid.x) : -100;
         const py = activePreview ? Math.min(mapH - activePreview.h, mouseGrid.y) : -100;
-
         placedItems.forEach(item => {
             ctx.fillStyle = item.color; ctx.globalAlpha = (item === draggingItem) ? 0.15 : 0.8;
             ctx.fillRect(item.x*baseGridSize+1, item.y*baseGridSize+1, item.w*baseGridSize-2, item.h*baseGridSize-2);
@@ -605,7 +597,6 @@
                 }
             }
         });
-
         if(activePreview) {
             ctx.globalAlpha = 0.5;
             const occupied = isAreaOccupied(px, py, activePreview.w, activePreview.h, draggingItem);
@@ -626,7 +617,6 @@
         return placedItems.some(item => (item !== ignoreItem) && (x < item.x + item.w && x + w > item.x && y < item.y + item.h && y + h > item.y));
     }
 
-    // PCマウスイベント
     mainArea.addEventListener('mousedown', (e) => {
         if (e.button === 1) { isDraggingMap = true; lastMousePos = { x: e.clientX, y: e.clientY }; mainArea.classList.add('dragging-map'); return; }
         if (e.button === 0) {
@@ -685,7 +675,6 @@
         }
     }, { passive: false });
 
-    // タッチイベント
     function getTouchDistance(touch1, touch2) {
         const dx = touch2.clientX - touch1.clientX;
         const dy = touch2.clientY - touch1.clientY;
