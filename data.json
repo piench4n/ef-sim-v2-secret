@@ -1,29 +1,31 @@
 {
-  "version": "1.0.0",
   "buildings": [
     {
-      "id": "assembler_t1",
-      "name": "加工機 T1",
-      "size": [3, 3],
-      "power": -50,
-      "color": "#4a9eff",
-      "description": "基本的な加工施設"
+      "id": "power_gen_1",
+      "name": "風力発電機",
+      "category": "電力",
+      "w": 2,
+      "h": 2,
+      "power": 10,
+      "color": "#44aaff"
     },
     {
-      "id": "power_pole",
-      "name": "送電パイル",
-      "size": [1, 1],
-      "power": 0,
-      "color": "#ffeb3b",
-      "description": "電力を供給する"
+      "id": "factory_1",
+      "name": "製錬所",
+      "category": "生産",
+      "w": 3,
+      "h": 3,
+      "power": -5,
+      "color": "#ffaa44"
     },
     {
-      "id": "solar_panel",
-      "name": "ソーラーパネル",
-      "size": [4, 4],
-      "power": 100,
-      "color": "#4caf50",
-      "description": "発電施設"
+      "id": "hub_1",
+      "name": "中継ステーション",
+      "category": "物流",
+      "w": 2,
+      "h": 2,
+      "power": -2,
+      "color": "#aa44ff"
     }
   ]
 }
