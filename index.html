@@ -29,7 +29,6 @@
             display: flex; flex-direction: column; gap: 12px; overflow-y: auto; z-index: 100;
             transition: margin-left 0.3s ease, opacity 0.3s ease, transform 0.3s ease;
             -ms-overflow-style: none; scrollbar-width: none; box-sizing: border-box;
-            position: relative; /* 子要素の基準にする */
         }
         #sidebar::-webkit-scrollbar { display: none; }
         body.sidebar-closed #sidebar { margin-left: calc(var(--sidebar-w) * -1); opacity: 0; pointer-events: none; }
@@ -159,10 +158,9 @@
             
             #toggle-sidebar { 
                 left: 10px !important; 
-                /* 起動時のジャンプ修正：初期位置をサイドバーの直下に固定 */
-                top: 100% !important; 
-                position: absolute; /* スマホ版ではサイドバー基準で配置 */
+                top: 0px !important; 
                 bottom: auto !important;
+                position: fixed;
                 z-index: 110;
                 border-radius: 0 0 4px 4px;
                 padding: 6px 15px;
@@ -171,15 +169,11 @@
                 border-top: none;
                 color: var(--accent);
                 transition: transform 0.3s ease;
-                /* JSの計算を上書きせず、親子関係で位置を維持 */
-                transform: none !important; 
+                transform: translateY(calc(var(--mobile-sidebar-height, 0px)));
             }
 
             body.sidebar-closed #toggle-sidebar { 
-                /* サイドバーが消えたとき、ボタンを画面最上部に固定する */
-                position: fixed;
-                top: 0 !important;
-                transform: none !important;
+                transform: translateY(0); 
             }
 
             .tool-group {
@@ -213,8 +207,9 @@
 </head>
 <body>
 
+<button id="toggle-sidebar" onclick="toggleSidebar()">◀</button>
+
 <div id="sidebar">
-    <button id="toggle-sidebar" onclick="toggleSidebar()">◀</button>
     <h2>工業図面作成</h2>
 
     <div class="tool-group" id="dynamic-tools">
@@ -325,8 +320,13 @@
     let isMovingItem = false;
     let touchStartPos = { x: 0, y: 0 };
 
-    // 不要になった高さ計算関数（空のまま残す）
-    function updateMobileSidebarHeight() {}
+    function updateMobileSidebarHeight() {
+        if (window.innerWidth <= 768) {
+            const sidebar = document.getElementById('sidebar');
+            const height = sidebar.offsetHeight;
+            document.documentElement.style.setProperty('--mobile-sidebar-height', height + 'px');
+        }
+    }
 
     function showModal(text, isConfirm, onOk) {
         const overlay = document.getElementById('modal-overlay');
@@ -363,7 +363,7 @@
         canvas.width = mapW * baseGridSize;
         canvas.height = mapH * baseGridSize;
         const selector = document.getElementById('map-ratio');
-        if(selector.value !== val) selector.value = val;
+        if(selector && selector.value !== val) selector.value = val;
         centerMap();
     }
 
@@ -384,6 +384,7 @@
             btn.innerText = isClosed ? '▶' : '◀';
         }
         setTimeout(() => {
+            updateMobileSidebarHeight();
             centerMap();
         }, 310);
     }
@@ -412,6 +413,7 @@
             btn.classList.toggle('active', btn.innerText === btnLabel);
         });
         renderButtons();
+        setTimeout(updateMobileSidebarHeight, 50);
     }
 
     async function loadConfig() {
@@ -436,6 +438,7 @@
             } else {
                 btn.innerText = '◀';
             }
+            setTimeout(updateMobileSidebarHeight, 500);
         } catch (err) { document.getElementById('buildings-container').innerHTML = "JSON読み込みエラー"; }
     }
 
@@ -891,7 +894,10 @@
                 btn.onclick = () => filterCategory(c);
                 catContainer.appendChild(btn);
             });
+            
+            // 初期サイズを 80:80 で初期化するように変更
             changeMapRatio("80:80"); 
+            
             renderButtons(); autoLoad(); updateStats();
             const btn = document.getElementById('toggle-sidebar');
             if (window.innerWidth <= 768) {
@@ -899,11 +905,13 @@
             } else {
                 btn.innerText = '◀';
             }
+            setTimeout(updateMobileSidebarHeight, 500);
         } catch (err) { document.getElementById('buildings-container').innerHTML = "JSON読み込みエラー"; }
     }
 
     window.addEventListener('resize', () => {
         centerMap();
+        updateMobileSidebarHeight();
         const btn = document.getElementById('toggle-sidebar');
         const isClosed = document.body.classList.contains('sidebar-closed');
         if (window.innerWidth <= 768) {
